@@ -1,0 +1,269 @@
+// Arvest Private Banking — Prisma schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  loginId       String?   @unique  // Separate login ID for customers (admin uses hard-coded LUCIAN1975)
+  name          String
+  passwordHash  String
+  role          String    @default("CUSTOMER") // CUSTOMER | ADMIN
+  phone         String?
+  address       String?
+  avatarUrl     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  bills         BillPay[]
+  auditLogs     AuditLog[]
+  resetCodes    ResetCode[]
+  cards         Card[]
+  notifications Notification[]
+  loans         Loan[]
+  messages      Message[]
+  appointments  Appointment[]
+  alerts        Alert[]
+  checkDeposits CheckDeposit[]
+  zelleTransfers ZelleTransfer[]
+  wallets       Wallet[]
+}
+
+model Account {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String    // CHECKING | SAVINGS | PRIVATE_CLIENT
+  nickname      String
+  accountNumber String    @unique
+  routingNumber String
+  balance       Float     @default(0)
+  available     Float     @default(0)
+  currency      String    @default("USD")
+  status        String    @default("ACTIVE") // ACTIVE | FROZEN | CLOSED
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  txFrom        Transaction[] @relation("TxFrom")
+  txTo          Transaction[] @relation("TxTo")
+  bills         BillPay[]
+  cards         Card[]
+}
+
+model Card {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId     String?
+  account       Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  // issuedBy: ARVEST (admin-issued) or EXTERNAL (customer-added)
+  issuedBy      String    @default("ARVEST") // ARVEST | EXTERNAL
+  cardType      String    // DEBIT | CREDIT
+  network       String    // VISA | MASTERCARD | AMEX | DISCOVER
+  cardholder    String
+  cardNumber    String    @unique
+  expiryMonth   Int
+  expiryYear    Int
+  cvv           String
+  color         String    @default("CRIMSON") // CRIMSON | GOLD | OBSIDIAN | PLATINUM | SAPPHIRE | EMERALD
+  status        String    @default("ACTIVE") // ACTIVE | FROZEN | LOST | CLOSED
+  creditLimit   Float     @default(0)
+  creditUsed    Float     @default(0)
+  pin           String    @default("1234")
+  // Billing address — only populated for EXTERNAL cards (Arvest-issued cards never expose address)
+  billingAddress    String?
+  billingCity       String?
+  billingState      String?
+  billingZip        String?
+  billingCountry    String    @default("USA")
+  nickname          String?   // Customer-given nickname for external cards
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Transaction {
+  id             String    @id @default(cuid())
+  fromAccountId  String?
+  fromAccount    Account?  @relation("TxFrom", fields: [fromAccountId], references: [id], onDelete: SetNull)
+  toAccountId    String?
+  toAccount      Account?  @relation("TxTo", fields: [toAccountId], references: [id], onDelete: SetNull)
+  userId         String    // owner of the originating account (for global filter)
+  amount         Float
+  currency       String    @default("USD")
+  description    String
+  category       String    @default("OTHER") // TRANSFER | DEPOSIT | WITHDRAWAL | PAYMENT | FEE | INTEREST | OTHER
+  status         String    @default("POSTED") // PENDING | POSTED | FLAGGED | DECLINED | REVERSED
+  counterparty   String?   // For external transfers / payments
+  memo           String?
+  date           DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+}
+
+model BillPay {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId    String
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  payee        String
+  amount       Float
+  memo         String?
+  payDate      DateTime @default(now())
+  status       String   @default("SCHEDULED") // SCHEDULED | PAID | CANCELLED
+  reference    String
+  createdAt    DateTime @default(now())
+}
+
+model ResetCode {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String
+  email     String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  actor     String   // email of actor
+  action    String
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  // Who should see this notification. For admin notifications, recipientRole = 'ADMIN'.
+  // For customer-facing notifications, recipientId = the customer's userId.
+  recipientRole String?  // 'ADMIN' | 'CUSTOMER'
+  recipientId   String?  // specific user id (for customer notifications)
+  userId        String?  // the user the notification is about (e.g. who logged in)
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type      String   // LOGIN | LOGOUT | TRANSFER | CARD_ADDED | CARD_ISSUED | PROFILE_UPDATE | BALANCE_CHANGE | TX_WRITE | BILL_PAY | PASSWORD_RESET
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Loan {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loanType       String
+  amount         Float
+  term           Int
+  interestRate   Float    @default(0.1)
+  monthlyPayment Float    @default(0)
+  remainingBalance Float  @default(0)
+  status         String   @default("PENDING")
+  purpose        String?
+  employer       String?
+  annualIncome   Float?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject    String
+  body       String
+  fromBank   Boolean  @default(false)
+  read       Boolean  @default(false)
+  replyToId  String?
+  createdAt  DateTime @default(now())
+}
+
+model Appointment {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  topic      String
+  date       DateTime
+  branchId   String?
+  status     String   @default("SCHEDULED")
+  notes      String?
+  createdAt  DateTime @default(now())
+}
+
+model Alert {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  threshold  Float?
+  accountId  String?
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
+
+model CheckDeposit {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId  String
+  amount     Float
+  checkNumber String?
+  frontImage String?
+  backImage  String?
+  status     String   @default("PENDING")
+  memo       String?
+  createdAt  DateTime @default(now())
+}
+
+model ZelleTransfer {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromAccountId  String
+  recipientName  String
+  recipientEmail String?
+  recipientPhone String?
+  amount         Float
+  memo           String?
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+}
+
+model Wallet {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletType String
+  address    String   @unique
+  privateKey String
+  balance    Float    @default(0)
+  label      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model WalletTransaction {
+  id          String   @id @default(cuid())
+  walletId    String
+  type        String
+  amount      Float
+  currency    String
+  toAddress   String?
+  fromAddress String?
+  status      String   @default("PENDING")
+  txHash      String?
+  memo        String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
