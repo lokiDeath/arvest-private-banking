@@ -144,7 +144,7 @@ export function CustomerAccounts() {
                   </div>
                   <div className="text-sm font-medium">{acct.nickname}</div>
                   <div className="text-[11px] text-muted-foreground font-mono mb-2">••••{acct.accountNumber.slice(-4)}</div>
-                  <div className="font-mono-balance text-2xl font-semibold">{formatCurrency(acct.balance)}</div>
+                  <div className="font-serif-display text-2xl">{formatCurrency(acct.balance)}</div>
                   <div className="text-[11px] text-muted-foreground mt-1">Available {formatCurrency(acct.available)}</div>
                 </CardContent>
               </Card>

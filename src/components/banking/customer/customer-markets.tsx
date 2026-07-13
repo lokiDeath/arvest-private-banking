@@ -1,227 +1,290 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { TrendingUp, TrendingDown, Activity, AlertTriangle } from 'lucide-react';
+import { safeJsonFetch } from '@/lib/safe-fetch';
+import {
+  TrendingUp, TrendingDown, BarChart3, Bitcoin, Coins, DollarSign, LineChart, Loader2, AlertTriangle,
+} from 'lucide-react';
 
-type Category = 'Crypto' | 'Forex' | 'Stocks' | 'Commodities';
+type Category = 'crypto' | 'forex' | 'stocks' | 'commodities';
 
-const SYMBOLS: Record<Category, { label: string; symbol: string; binance?: string }[]> = {
-  Crypto: [
-    { label: 'Bitcoin', symbol: 'BINANCE:BTCUSDT', binance: 'BTCUSDT' },
-    { label: 'Ethereum', symbol: 'BINANCE:ETHUSDT', binance: 'ETHUSDT' },
-    { label: 'Solana', symbol: 'BINANCE:SOLUSDT', binance: 'SOLUSDT' },
-    { label: 'BNB', symbol: 'BINANCE:BNBUSDT', binance: 'BNBUSDT' },
-    { label: 'XRP', symbol: 'BINANCE:XRPUSDT', binance: 'XRPUSDT' },
-    { label: 'Cardano', symbol: 'BINANCE:ADAUSDT', binance: 'ADAUSDT' },
+interface AssetDef {
+  symbol: string;        // TradingView symbol
+  label: string;
+  binance?: string;      // Binance ticker (for crypto tiles)
+}
+
+const CATEGORY_ASSETS: Record<Category, AssetDef[]> = {
+  crypto: [
+    { symbol: 'BINANCE:BTCUSDT', label: 'Bitcoin', binance: 'BTCUSDT' },
+    { symbol: 'BINANCE:ETHUSDT', label: 'Ethereum', binance: 'ETHUSDT' },
+    { symbol: 'BINANCE:BNBUSDT', label: 'BNB', binance: 'BNBUSDT' },
+    { symbol: 'BINANCE:SOLUSDT', label: 'Solana', binance: 'SOLUSDT' },
+    { symbol: 'BINANCE:XRPUSDT', label: 'XRP', binance: 'XRPUSDT' },
+    { symbol: 'BINANCE:ADAUSDT', label: 'Cardano', binance: 'ADAUSDT' },
+    { symbol: 'BINANCE:DOGEUSDT', label: 'Dogecoin', binance: 'DOGEUSDT' },
   ],
-  Forex: [
-    { label: 'EUR/USD', symbol: 'FX:EURUSD' },
-    { label: 'GBP/USD', symbol: 'FX:GBPUSD' },
-    { label: 'USD/JPY', symbol: 'FX:USDJPY' },
-    { label: 'USD/CHF', symbol: 'FX:USDCHF' },
-    { label: 'AUD/USD', symbol: 'FX:AUDUSD' },
-    { label: 'USD/CAD', symbol: 'FX:USDCAD' },
+  forex: [
+    { symbol: 'FX:EURUSD', label: 'EUR / USD' },
+    { symbol: 'FX:GBPUSD', label: 'GBP / USD' },
+    { symbol: 'FX:USDJPY', label: 'USD / JPY' },
+    { symbol: 'FX:AUDUSD', label: 'AUD / USD' },
+    { symbol: 'FX:USDCAD', label: 'USD / CAD' },
+    { symbol: 'FX:USDCHF', label: 'USD / CHF' },
   ],
-  Stocks: [
-    { label: 'Apple', symbol: 'NASDAQ:AAPL' },
-    { label: 'Microsoft', symbol: 'NASDAQ:MSFT' },
-    { label: 'Nvidia', symbol: 'NASDAQ:NVDA' },
-    { label: 'Amazon', symbol: 'NASDAQ:AMZN' },
-    { label: 'Tesla', symbol: 'NASDAQ:TSLA' },
-    { label: 'JPMorgan', symbol: 'NYSE:JPM' },
+  stocks: [
+    { symbol: 'NASDAQ:AAPL', label: 'Apple' },
+    { symbol: 'NASDAQ:MSFT', label: 'Microsoft' },
+    { symbol: 'NASDAQ:GOOGL', label: 'Alphabet' },
+    { symbol: 'NASDAQ:AMZN', label: 'Amazon' },
+    { symbol: 'NYSE:JPM', label: 'JPMorgan' },
+    { symbol: 'NYSE:BRK.B', label: 'Berkshire' },
   ],
-  Commodities: [
-    { label: 'Gold', symbol: 'OANDA:XAUUSD' },
-    { label: 'Silver', symbol: 'OANDA:XAGUSD' },
-    { label: 'Crude Oil', symbol: 'TVC:USOIL' },
-    { label: 'Natural Gas', symbol: 'TVC:NATGAS' },
-    { label: 'Copper', symbol: 'TVC:COPPER' },
-    { label: 'Platinum', symbol: 'TVC:PLATINUM' },
+  commodities: [
+    { symbol: 'TVC:GOLD', label: 'Gold' },
+    { symbol: 'TVC:SILVER', label: 'Silver' },
+    { symbol: 'TVC:USOIL', label: 'WTI Crude' },
+    { symbol: 'TVC:UKOIL', label: 'Brent' },
+    { symbol: 'COMEX:HG1!', label: 'Copper' },
+    { symbol: 'CBOT:ZC1!', label: 'Corn' },
   ],
 };
 
-interface CryptoPrice {
-  symbol: string; price: number; change: number;
+interface BinanceTicker {
+  symbol: string;
+  lastPrice: string;
+  priceChangePercent: string;
+  highPrice: string;
+  lowPrice: string;
+  quoteVolume: string;
+}
+
+declare global {
+  interface Window {
+    TradingView?: any;
+  }
 }
 
 export function CustomerMarkets() {
-  const [category, setCategory] = useState<Category>('Crypto');
-  const [activeSymbol, setActiveSymbol] = useState(SYMBOLS.Crypto[0].symbol);
-  const [prices, setPrices] = useState<CryptoPrice[]>([]);
+  const [category, setCategory] = useState<Category>('crypto');
+  const [activeSymbol, setActiveSymbol] = useState<string>('BINANCE:BTCUSDT');
+  const [chartReady, setChartReady] = useState(false);
+  const [tickers, setTickers] = useState<Record<string, BinanceTicker>>({});
+  const [tickersLoading, setTickersLoading] = useState(false);
+  const widgetRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const scriptLoadedRef = useRef(false);
 
-  // Load TradingView tv.js once
+  // ===== Load TradingView tv.js once =====
   useEffect(() => {
-    if (scriptLoadedRef.current) return;
-    const existing = document.querySelector('script[src="https://s3.tradingview.com/tv.js"]');
-    if (existing) {
-      scriptLoadedRef.current = true;
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/tv.js';
-    script.async = true;
-    script.onload = () => { scriptLoadedRef.current = true; };
-    script.onerror = () => { toast.error('Failed to load chart library'); };
-    document.body.appendChild(script);
+    let cancelled = false;
+    if (window.TradingView) { setChartReady(true); return; }
+    const s = document.createElement('script');
+    s.src = 'https://s3.tradingview.com/tv.js';
+    s.async = true;
+    s.onload = () => { if (!cancelled) setChartReady(true); };
+    s.onerror = () => { if (!cancelled) toast.error('Failed to load TradingView chart'); };
+    document.head.appendChild(s);
+    return () => { cancelled = true; };
   }, []);
 
-  // Render widget when symbol changes or script becomes available
+  // ===== Create / re-create widget on symbol change =====
   useEffect(() => {
-    let cancelled = false;
-    function tryRender() {
-      const w = (window as any).TradingView;
-      if (!w) { setTimeout(tryRender, 250); return; }
-      if (cancelled) return;
-      // Clear container
-      if (containerRef.current) containerRef.current.innerHTML = '';
-      new w.widget({
-        autosize: true,
-        symbol: activeSymbol,
-        interval: '60',
-        timezone: 'Etc/UTC',
-        theme: 'light',
-        style: '1',
-        locale: 'en',
-        allow_symbol_change: true,
-        container_id: 'tradingview_live_chart',
-        hide_top_toolbar: false,
-        hide_legend: false,
-        save_image: false,
-      });
-    }
-    tryRender();
-    return () => { cancelled = true; };
-  }, [activeSymbol]);
+    if (!chartReady || !window.TradingView) return;
+    // Clear container
+    if (containerRef.current) containerRef.current.innerHTML = '';
+    // eslint-disable-next-line new-cap
+    widgetRef.current = new window.TradingView.widget({
+      autosize: true,
+      symbol: activeSymbol,
+      interval: '60',
+      timezone: 'Etc/UTC',
+      theme: 'light',
+      style: '1',
+      locale: 'en',
+      allow_symbol_change: true,
+      container_id: 'tradingview_live_chart',
+      studies: [],
+      hide_top_toolbar: false,
+      save_image: false,
+    });
+  }, [chartReady, activeSymbol]);
 
-  // Poll Binance for crypto prices when in Crypto category
-  useEffect(() => {
-    if (category !== 'Crypto') return;
-    let cancelled = false;
-    async function fetchPrices() {
-      try {
-        const symbols = SYMBOLS.Crypto.map((s) => s.binance!).filter(Boolean);
-        const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`;
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const data: any[] = await res.json();
-        if (cancelled) return;
-        const mapped = data.map((d) => ({
-          symbol: d.symbol,
-          price: parseFloat(d.lastPrice),
-          change: parseFloat(d.priceChangePercent),
-        }));
-        setPrices(mapped);
-      } catch {
-        // Silent fail — prices are decorative
-      }
+  // ===== Fetch live crypto prices from Binance =====
+  const fetchTickers = useCallback(async () => {
+    setTickersLoading(true);
+    try {
+      const symbols = CATEGORY_ASSETS.crypto
+        .map(a => a.binance)
+        .filter(Boolean) as string[];
+      const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`;
+      const data = await safeJsonFetch(url).catch(() => [] as BinanceTicker[]);
+      const map: Record<string, BinanceTicker> = {};
+      (Array.isArray(data) ? data : []).forEach((t: BinanceTicker) => {
+        if (t && t.symbol) map[t.symbol] = t;
+      });
+      setTickers(map);
+    } finally {
+      setTickersLoading(false);
     }
-    fetchPrices();
-    const t = setInterval(fetchPrices, 10_000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, [category]);
+  }, []);
+
+  useEffect(() => {
+    fetchTickers();
+    const id = setInterval(fetchTickers, 30000); // refresh every 30s
+    return () => clearInterval(id);
+  }, [fetchTickers]);
+
+  function pickAsset(a: AssetDef) {
+    setActiveSymbol(a.symbol);
+    toast.success(`Now viewing ${a.label}`);
+  }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-serif-display text-2xl mb-1 flex items-center gap-2">
-          <Activity className="w-6 h-6 text-primary" /> Markets
-        </h1>
-        <p className="text-sm text-muted-foreground">Live market quotes and charts. Powered by TradingView and Binance.</p>
+        <h1 className="font-serif-display text-2xl mb-1">Markets</h1>
+        <p className="text-sm text-muted-foreground">Live charts and crypto prices powered by TradingView and Binance. Informational only — not investment advice.</p>
       </div>
+
+      {/* Category tabs */}
+      <Tabs value={category} onValueChange={(v) => setCategory(v as Category)}>
+        <TabsList className="grid w-full grid-cols-4 max-w-xl">
+          <TabsTrigger value="crypto"><Bitcoin className="w-3.5 h-3.5 mr-1.5" /> Crypto</TabsTrigger>
+          <TabsTrigger value="forex"><DollarSign className="w-3.5 h-3.5 mr-1.5" /> Forex</TabsTrigger>
+          <TabsTrigger value="stocks"><BarChart3 className="w-3.5 h-3.5 mr-1.5" /> Stocks</TabsTrigger>
+          <TabsTrigger value="commodities"><Coins className="w-3.5 h-3.5 mr-1.5" /> Commodities</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Chart */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center justify-between">
-            <span>{SYMBOLS[category].find(s => s.symbol === activeSymbol)?.label || 'Live Chart'}</span>
-            <Badge variant="outline" className="text-[10px]">{activeSymbol}</Badge>
-          </CardTitle>
-          <CardDescription className="text-xs">Real-time chart · click any symbol below to switch</CardDescription>
+        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <LineChart className="w-4 h-4" /> Live Chart
+            </CardTitle>
+            <CardDescription className="text-xs">
+              {CATEGORY_ASSETS[category].find(a => a.symbol === activeSymbol)?.label || activeSymbol}
+            </CardDescription>
+          </div>
+          <Badge variant="outline" className="text-[10px] gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> LIVE
+          </Badge>
         </CardHeader>
         <CardContent>
-          <div
-            id="tradingview_live_chart"
-            ref={containerRef}
-            style={{ height: 450, width: '100%' }}
-            className="rounded-md overflow-hidden border border-border"
-          />
+          <div className="rounded-lg overflow-hidden border border-border" style={{ height: 450 }}>
+            <div id="tradingview_live_chart" ref={containerRef} className="w-full h-full">
+              {!chartReady && (
+                <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
+                  <Loader2 className="w-6 h-6 animate-spin mb-2" />
+                  <span className="text-sm">Loading TradingView…</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Asset selector buttons */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {CATEGORY_ASSETS[category].map(a => {
+              const active = a.symbol === activeSymbol;
+              return (
+                <button
+                  key={a.symbol}
+                  onClick={() => pickAsset(a)}
+                  className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                    active ? 'arvest-gradient text-white border-transparent' : 'border-border hover:border-primary hover:bg-primary/5'
+                  }`}
+                >
+                  {a.label}
+                </button>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Category tabs */}
-      <div className="flex flex-wrap gap-2">
-        {(Object.keys(SYMBOLS) as Category[]).map((c) => (
-          <button
-            key={c}
-            onClick={() => {
-              setCategory(c);
-              setActiveSymbol(SYMBOLS[c][0].symbol);
-            }}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              category === c
-                ? 'arvest-gradient text-white'
-                : 'bg-muted text-muted-foreground hover:bg-muted/70'
-            }`}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
-
-      {/* Asset buttons */}
-      <div className="flex flex-wrap gap-2">
-        {SYMBOLS[category].map((s) => (
-          <button
-            key={s.symbol}
-            onClick={() => setActiveSymbol(s.symbol)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
-              activeSymbol === s.symbol
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-background border-border hover:bg-muted'
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Crypto price tiles */}
-      {category === 'Crypto' && prices.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {prices.map((p) => {
-            const info = SYMBOLS.Crypto.find((s) => s.binance === p.symbol);
-            const up = p.change >= 0;
-            return (
-              <Card key={p.symbol}>
-                <CardContent className="p-3">
-                  <div className="text-[11px] text-muted-foreground">{info?.label || p.symbol}</div>
-                  <div className="font-serif-display text-base mt-0.5">
-                    ${p.price < 1 ? p.price.toFixed(4) : p.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                  </div>
-                  <div className={`text-[11px] flex items-center gap-0.5 ${up ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    {up ? '+' : ''}{p.change.toFixed(2)}%
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+      {/* Crypto tiles — only shown for crypto category */}
+      {category === 'crypto' && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Bitcoin className="w-4 h-4" /> Live Crypto Prices
+            </CardTitle>
+            <CardDescription className="text-xs">24h stats from Binance · auto-refreshes every 30s</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {tickersLoading && Object.keys(tickers).length === 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
+              </div>
+            ) : Object.keys(tickers).length === 0 ? (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                Live prices unavailable. Binance API may be blocked by your network.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {CATEGORY_ASSETS.crypto.map(a => {
+                  const t = a.binance ? tickers[a.binance] : undefined;
+                  if (!t) return null;
+                  const price = parseFloat(t.lastPrice);
+                  const change = parseFloat(t.priceChangePercent);
+                  const up = change >= 0;
+                  const def = a;
+                  return (
+                    <button
+                      key={a.symbol}
+                      onClick={() => pickAsset(def)}
+                      className={`text-left p-4 rounded-lg border transition-colors hover:shadow-sm ${
+                        activeSymbol === a.symbol ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Bitcoin className="w-3.5 h-3.5 text-primary" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium leading-none">{a.label}</div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">{a.binance}</div>
+                          </div>
+                        </div>
+                        {up ? (
+                          <TrendingUp className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 text-destructive" />
+                        )}
+                      </div>
+                      <div className="font-mono-balance text-lg">
+                        ${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="flex items-center justify-between mt-1 text-[11px]">
+                        <span className={up ? 'text-emerald-600' : 'text-destructive'}>
+                          {up ? '+' : ''}{change.toFixed(2)}%
+                        </span>
+                        <span className="text-muted-foreground">
+                          Vol ${(parseFloat(t.quoteVolume) / 1_000_000).toFixed(1)}M
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Disclaimer */}
-      <div className="flex items-start gap-2 p-4 rounded-md bg-muted/40 border border-border text-[11px] text-muted-foreground">
-        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
-        <div>
-          <strong className="text-foreground">Market data is provided for informational purposes only and is not investment advice.</strong>{' '}
-          Arvest Private Banking does not offer investment advisory services through this platform. Quotes may be delayed and are sourced
-          from third-party providers. Past performance is not indicative of future results. Please consult a licensed financial advisor
-          before making investment decisions.
+      <div className="p-4 rounded-lg bg-muted/40 border border-border flex items-start gap-3">
+        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        <div className="text-[11px] text-muted-foreground leading-relaxed">
+          <strong className="text-foreground">Disclaimer:</strong> Market data is provided for informational purposes only and does not constitute investment, legal, or tax advice. Arvest Private Banking does not offer cryptocurrency trading through deposit accounts. Past performance is not indicative of future results. Verify all data before making financial decisions.
         </div>
       </div>
     </div>

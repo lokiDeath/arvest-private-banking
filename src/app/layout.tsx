@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import { Inter, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -26,15 +26,6 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.ico",
   },
-};
-
-// Mobile-optimized viewport: prevent pinch-zoom & double-tap zoom on touch devices.
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  themeColor: "#5a1818",
 };
 
 export default function RootLayout({

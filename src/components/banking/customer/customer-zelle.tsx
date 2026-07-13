@@ -1,209 +1,197 @@
 'use client';
-
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { formatCurrency, maskAccountNumber, formatDate } from '@/lib/store';
-import { Send, CheckCircle2, Loader2, History, Mail, Phone, Zap } from 'lucide-react';
-
-interface Account {
-  id: string; type: string; nickname: string; accountNumber: string;
-  balance: number; available: number;
-}
+import { safeJsonFetch } from '@/lib/safe-fetch';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/store';
+import { Send, Loader2, AlertCircle, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, XCircle } from 'lucide-react';
 
 interface ZelleTransfer {
-  id: string; recipientName: string; recipientEmail: string | null;
-  recipientPhone: string | null; amount: number; status: string; createdAt: string;
+  id: string;
+  recipientName: string;
+  recipientEmail: string | null;
+  recipientPhone: string | null;
+  amount: number;
+  memo: string | null;
+  status: string;
+  createdAt: string;
 }
 
-export function CustomerZelle({ onSuccess }: { onSuccess: () => void }) {
-  const [accounts, setAccounts] = useState<Account[]>([]);
+export function CustomerZelle() {
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [transfers, setTransfers] = useState<ZelleTransfer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-
+  const [error, setError] = useState<string | null>(null);
   const [fromAccountId, setFromAccountId] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [contactType, setContactType] = useState<'email' | 'phone'>('email');
-  const [recipientEmail, setRecipientEmail] = useState('');
-  const [recipientPhone, setRecipientPhone] = useState('');
+  const [contactValue, setContactValue] = useState('');
   const [amount, setAmount] = useState('');
   const [memo, setMemo] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  async function load() {
-    try {
-      const [aRes, zRes] = await Promise.all([
-        fetch('/api/accounts'),
-        fetch('/api/zelle'),
-      ]);
-      const aData = await aRes.json();
-      const zData = await zRes.json();
-      setAccounts(aData.accounts || []);
-      setTransfers(zData.transfers || []);
-      if (aData.accounts?.[0]) setFromAccountId(aData.accounts[0].id);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { load(); }, []);
-
-  const fromAccount = accounts.find(a => a.id === fromAccountId);
-  const amountNum = parseFloat(amount) || 0;
-  const exceedsBalance = fromAccount ? amountNum > fromAccount.balance : false;
+  useEffect(() => {
+    (async () => {
+      try {
+        const aData = await safeJsonFetch('/api/accounts');
+        const zData = await safeJsonFetch('/api/zelle').catch(() => ({ transfers: [] }));
+        setAccounts(aData.accounts || []);
+        setTransfers(zData.transfers || []);
+        if (aData.accounts?.[0]) setFromAccountId(aData.accounts[0].id);
+      } catch (e: any) {
+        setError(e.message || 'Failed to load data');
+      } finally { setLoading(false); }
+    })();
+  }, []);
 
   async function submit() {
-    if (!fromAccountId) { toast.error('Select an account'); return; }
-    if (!recipientName.trim()) { toast.error('Enter recipient name'); return; }
-    if (contactType === 'email' && !recipientEmail.trim()) { toast.error('Enter recipient email'); return; }
-    if (contactType === 'phone' && !recipientPhone.trim()) { toast.error('Enter recipient phone'); return; }
-    if (amountNum <= 0) { toast.error('Enter a valid amount'); return; }
-    if (amountNum > 5000) { toast.error('Zelle daily limit is $5,000'); return; }
-    if (exceedsBalance) { toast.error('Insufficient funds'); return; }
-
+    if (!fromAccountId || !recipientName || !contactValue || !amount) { toast.error('Fill all fields'); return; }
     setSubmitting(true);
     try {
-      const res = await fetch('/api/zelle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fromAccountId,
-          recipientName: recipientName.trim(),
-          recipientEmail: contactType === 'email' ? recipientEmail.trim() : undefined,
-          recipientPhone: contactType === 'phone' ? recipientPhone.trim() : undefined,
-          amount: amountNum,
-          memo: memo || undefined,
-        }),
+      const body: any = { fromAccountId, recipientName, amount: parseFloat(amount), memo };
+      if (contactType === 'email') body.recipientEmail = contactValue; else body.recipientPhone = contactValue;
+      await safeJsonFetch('/api/zelle', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (!res.ok) { toast.error(data.error || 'Submission failed'); return; }
-      toast.success('Zelle sent — pending approval');
-      setRecipientName(''); setRecipientEmail(''); setRecipientPhone(''); setAmount(''); setMemo('');
-      onSuccess();
-      load();
-    } finally {
-      setSubmitting(false);
-    }
+      toast.success('Zelle sent · pending admin approval');
+      setRecipientName(''); setContactValue(''); setAmount(''); setMemo('');
+      const zData = await safeJsonFetch('/api/zelle').catch(() => ({ transfers: [] }));
+      setTransfers(zData.transfers || []);
+    } catch (e: any) { toast.error(e.message || 'Failed'); }
+    finally { setSubmitting(false); }
   }
 
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-96 w-full" />
-      </div>
-    );
+  if (loading) return <div className="space-y-4"><div className="h-8 w-48 bg-muted animate-pulse rounded" /></div>;
+  if (error) return <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/5 text-sm text-destructive flex items-center gap-2"><AlertCircle className="w-4 h-4" />{error}</div>;
+
+  const totalSent = transfers.filter(t => t.status === 'SENT' || t.status === 'POSTED').reduce((s, t) => s + t.amount, 0);
+  const pendingCount = transfers.filter(t => t.status === 'PENDING').length;
+
+  function getStatusBadge(status: string) {
+    if (status === 'PENDING') return <Badge variant="secondary" className="text-[10px] gap-1"><Clock className="w-2.5 h-2.5" /> Pending</Badge>;
+    if (status === 'SENT' || status === 'POSTED') return <Badge className="text-[10px] gap-1 bg-emerald-600"><CheckCircle2 className="w-2.5 h-2.5" /> Sent</Badge>;
+    if (status === 'FAILED' || status === 'DECLINED') return <Badge variant="destructive" className="text-[10px] gap-1"><XCircle className="w-2.5 h-2.5" /> Failed</Badge>;
+    return <Badge variant="outline" className="text-[10px]">{status}</Badge>;
   }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
-        <h1 className="font-serif-display text-2xl mb-1 flex items-center gap-2">
-          <Zap className="w-6 h-6 text-primary" /> Zelle
-        </h1>
-        <p className="text-sm text-muted-foreground">Send money to friends and family in minutes. All Zelle transfers require banker approval.</p>
+        <h1 className="font-serif-display text-2xl mb-1">Zelle</h1>
+        <p className="text-sm text-muted-foreground">Send money to friends and family · pending admin approval</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card><CardContent className="p-4">
+          <div className="text-[11px] text-muted-foreground tracking-wider mb-1">TOTAL SENT</div>
+          <div className="font-mono-balance text-xl">{formatCurrency(totalSent)}</div>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <div className="text-[11px] text-muted-foreground tracking-wider mb-1">PENDING</div>
+          <div className="font-mono-balance text-xl">{pendingCount} {pendingCount === 1 ? 'payment' : 'payments'}</div>
+        </CardContent></Card>
+      </div>
+
+      {/* Notice */}
+      <div className="p-3 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
+        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+        Funds are sent after admin approval. This typically takes 1-2 business hours.
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Send form */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Send with Zelle</CardTitle>
-            <CardDescription className="text-xs">Daily limit: $5,000 · Pending approval</CardDescription>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Send Money</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>From account</Label>
               <Select value={fromAccountId} onValueChange={setFromAccountId}>
-                <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {accounts.map(a => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.nickname} · {maskAccountNumber(a.accountNumber)} ({formatCurrency(a.balance)})
-                    </SelectItem>
-                  ))}
+                  {accounts.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.nickname} · {formatCurrency(a.balance)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <Label>Recipient name</Label>
-              <Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Jane Smith" />
+              <Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="John Doe" />
             </div>
-
             <div className="space-y-2">
               <Label>Contact method</Label>
-              <Tabs value={contactType} onValueChange={(v) => setContactType(v as 'email' | 'phone')}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="email" className="text-xs"><Mail className="w-3 h-3 mr-1" /> Email</TabsTrigger>
-                  <TabsTrigger value="phone" className="text-xs"><Phone className="w-3 h-3 mr-1" /> Mobile</TabsTrigger>
-                </TabsList>
+              <Tabs value={contactType} onValueChange={(v) => setContactType(v as any)}>
+                <TabsList className="grid grid-cols-2"><TabsTrigger value="email">Email</TabsTrigger><TabsTrigger value="phone">Phone</TabsTrigger></TabsList>
               </Tabs>
-              {contactType === 'email' ? (
-                <Input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} placeholder="jane@example.com" />
-              ) : (
-                <Input type="tel" value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)} placeholder="+1 (555) 123-4567" />
-              )}
+              <Input value={contactValue} onChange={(e) => setContactValue(e.target.value)} placeholder={contactType === 'email' ? 'john@example.com' : '+1 (555) 123-4567'} />
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Amount ($)</Label>
-                <Input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
-                {exceedsBalance && <p className="text-[11px] text-destructive">Exceeds available balance</p>}
+                <Label>Amount</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <Input type="number" step="0.01" className="pl-7 font-mono-balance" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>Memo (optional)</Label>
-                <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Dinner, rent, gift" />
+                <Label>Memo</Label>
+                <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Dinner" />
               </div>
             </div>
-
             <Button onClick={submit} disabled={submitting} className="w-full arvest-gradient text-white">
-              {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-              Send money
+              {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending…</> : <><Send className="w-4 h-4 mr-2" /> Send money</>}
             </Button>
           </CardContent>
         </Card>
 
+        {/* Transaction history — professional bank style */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2"><History className="w-4 h-4" /> Zelle Activity</CardTitle>
-            <CardDescription className="text-xs">Your recent Zelle transfers</CardDescription>
+            <CardTitle className="text-base">Transaction History</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2 max-h-[500px] overflow-y-auto arvest-scroll">
-              {transfers.length === 0 ? (
-                <div className="text-center py-8 text-sm text-muted-foreground">
-                  <Send className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                  No Zelle transfers yet
-                </div>
-              ) : transfers.map((t) => (
-                <div key={t.id} className="flex items-center gap-3 p-3 rounded-md border border-border">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Send className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{t.recipientName}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {t.recipientEmail || t.recipientPhone} · {formatDate(t.createdAt)}
+            {transfers.length === 0 ? (
+              <div className="text-center py-12">
+                <Send className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-40" />
+                <p className="text-sm text-muted-foreground">No Zelle transfers yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Your sent payments will appear here</p>
+              </div>
+            ) : (
+              <div className="space-y-1 max-h-[400px] overflow-y-auto arvest-scroll">
+                {transfers.map((t, i) => (
+                  <div key={t.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/40 transition-colors border-b border-border last:border-0">
+                    {/* Icon */}
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <ArrowUpRight className="w-4 h-4 text-primary" />
+                    </div>
+                    {/* Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium truncate">{t.recipientName}</span>
+                        <span className="font-mono-balance text-sm shrink-0">-{formatCurrency(t.amount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                        <span className="text-[11px] text-muted-foreground truncate">
+                          {t.recipientEmail || t.recipientPhone || '—'}
+                          {t.memo ? ` · ${t.memo}` : ''}
+                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[10px] text-muted-foreground">{formatDate(t.createdAt)}</span>
+                          {getStatusBadge(t.status)}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-medium text-primary">−{formatCurrency(t.amount)}</div>
-                    <Badge variant={t.status === 'POSTED' || t.status === 'APPROVED' ? 'default' : 'secondary'} className="text-[10px]">{t.status}</Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
