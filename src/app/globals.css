@@ -102,45 +102,46 @@
 }
 
 .dark {
-  --background: oklch(0.16 0.02 25);
-  --foreground: oklch(0.96 0.01 60);
-  --card: oklch(0.21 0.03 25);
-  --card-foreground: oklch(0.96 0.01 60);
-  --popover: oklch(0.21 0.03 25);
-  --popover-foreground: oklch(0.96 0.01 60);
+  /* Obsidian (#121214 approx) background with muted crimson + subtle gold accent */
+  --background: oklch(0.16 0.012 270);          /* near-black obsidian */
+  --foreground: oklch(0.94 0.01 60);
+  --card: oklch(0.20 0.014 270);
+  --card-foreground: oklch(0.94 0.01 60);
+  --popover: oklch(0.20 0.014 270);
+  --popover-foreground: oklch(0.94 0.01 60);
 
-  --primary: oklch(0.6 0.18 25);                /* brighter crimson in dark */
-  --primary-foreground: oklch(0.98 0.01 60);
+  --primary: oklch(0.52 0.13 25);              /* muted crimson */
+  --primary-foreground: oklch(0.96 0.005 60);
 
-  --secondary: oklch(0.28 0.03 25);
-  --secondary-foreground: oklch(0.95 0.01 60);
+  --secondary: oklch(0.26 0.012 270);
+  --secondary-foreground: oklch(0.92 0.01 60);
 
-  --muted: oklch(0.28 0.03 25);
-  --muted-foreground: oklch(0.7 0.02 60);
+  --muted: oklch(0.26 0.012 270);
+  --muted-foreground: oklch(0.66 0.015 60);
 
-  --accent: oklch(0.7 0.13 75);
-  --accent-foreground: oklch(0.15 0.02 30);
+  --accent: oklch(0.68 0.10 75);               /* subtle gold accent */
+  --accent-foreground: oklch(0.16 0.012 270);
 
-  --destructive: oklch(0.65 0.2 25);
+  --destructive: oklch(0.6 0.18 25);
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.6 0.18 25);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.52 0.13 25);
 
-  --chart-1: oklch(0.6 0.18 25);
-  --chart-2: oklch(0.78 0.13 75);
-  --chart-3: oklch(0.55 0.1 220);
-  --chart-4: oklch(0.55 0.12 145);
-  --chart-5: oklch(0.7 0.18 35);
+  --chart-1: oklch(0.52 0.13 25);
+  --chart-2: oklch(0.68 0.10 75);
+  --chart-3: oklch(0.55 0.09 220);
+  --chart-4: oklch(0.55 0.11 145);
+  --chart-5: oklch(0.62 0.14 35);
 
-  --sidebar: oklch(0.14 0.02 25);
-  --sidebar-foreground: oklch(0.95 0.01 60);
-  --sidebar-primary: oklch(0.78 0.13 75);
-  --sidebar-primary-foreground: oklch(0.18 0.04 30);
-  --sidebar-accent: oklch(0.22 0.03 25);
-  --sidebar-accent-foreground: oklch(0.95 0.01 60);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.78 0.13 75);
+  --sidebar: oklch(0.13 0.012 270);            /* deeper obsidian for sidebar */
+  --sidebar-foreground: oklch(0.94 0.01 60);
+  --sidebar-primary: oklch(0.68 0.10 75);
+  --sidebar-primary-foreground: oklch(0.16 0.012 270);
+  --sidebar-accent: oklch(0.22 0.014 270);
+  --sidebar-accent-foreground: oklch(0.94 0.01 60);
+  --sidebar-border: oklch(1 0 0 / 6%);
+  --sidebar-ring: oklch(0.68 0.10 75);
 }
 
 @layer base {
@@ -173,6 +174,15 @@
   font-family: 'Cormorant Garamond', 'Times New Roman', Georgia, serif;
   font-weight: 500;
   letter-spacing: -0.01em;
+}
+
+/* Professional sans-serif monetary values — uses tabular figures */
+.font-mono-balance {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.01em;
+  font-weight: 600;
 }
 
 /* Custom scrollbar */
@@ -217,4 +227,13 @@
 @media print {
   .no-print { display: none !important; }
   body { background: white !important; }
+}
+
+/* Mobile touch — disable double-tap zoom, allow tap delay optimization */
+html {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  touch-action: manipulation;
 }

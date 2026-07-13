@@ -28,6 +28,13 @@ model User {
   resetCodes    ResetCode[]
   cards         Card[]
   notifications Notification[]
+  loans         Loan[]
+  messages      Message[]
+  appointments  Appointment[]
+  alerts        Alert[]
+  checkDeposits CheckDeposit[]
+  zelleTransfers ZelleTransfer[]
+  wallets       Wallet[]
 }
 
 model Account {
@@ -149,4 +156,114 @@ model Notification {
   body      String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+model Loan {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loanType       String
+  amount         Float
+  term           Int
+  interestRate   Float    @default(0.1)
+  monthlyPayment Float    @default(0)
+  remainingBalance Float  @default(0)
+  status         String   @default("PENDING")
+  purpose        String?
+  employer       String?
+  annualIncome   Float?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject    String
+  body       String
+  fromBank   Boolean  @default(false)
+  read       Boolean  @default(false)
+  replyToId  String?
+  createdAt  DateTime @default(now())
+}
+
+model Appointment {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  topic      String
+  date       DateTime
+  branchId   String?
+  status     String   @default("SCHEDULED")
+  notes      String?
+  createdAt  DateTime @default(now())
+}
+
+model Alert {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  threshold  Float?
+  accountId  String?
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
+
+model CheckDeposit {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId  String
+  amount     Float
+  checkNumber String?
+  frontImage String?
+  backImage  String?
+  status     String   @default("PENDING")
+  memo       String?
+  createdAt  DateTime @default(now())
+}
+
+model ZelleTransfer {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromAccountId  String
+  recipientName  String
+  recipientEmail String?
+  recipientPhone String?
+  amount         Float
+  memo           String?
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+}
+
+model Wallet {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletType String
+  address    String   @unique
+  privateKey String
+  balance    Float    @default(0)
+  label      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model WalletTransaction {
+  id          String   @id @default(cuid())
+  walletId    String
+  type        String
+  amount      Float
+  currency    String
+  toAddress   String?
+  fromAddress String?
+  status      String   @default("PENDING")
+  txHash      String?
+  memo        String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
 }

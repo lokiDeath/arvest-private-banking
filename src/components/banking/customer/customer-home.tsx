@@ -88,7 +88,7 @@ export function CustomerHome({ onNavigate }: { onNavigate: (v: CustomerView) => 
                 <Sparkles className="w-3 h-3" /> TOTAL PRIVATE WEALTH
               </div>
               <div className="flex items-center gap-3 mb-1">
-                <div className="font-serif-display text-4xl lg:text-5xl">
+                <div className="font-mono-balance text-4xl lg:text-5xl font-semibold">
                   {hideBalances ? '••••••••' : formatCurrency(totalBalance)}
                 </div>
                 <button onClick={() => setHideBalances(!hideBalances)} className="text-white/60 hover:text-white">
@@ -158,7 +158,7 @@ export function CustomerHome({ onNavigate }: { onNavigate: (v: CustomerView) => 
                       <div className="text-[11px] text-muted-foreground font-mono">••••{acct.accountNumber.slice(-4)}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-serif-display text-lg">{hideBalances ? '••••' : formatCurrency(acct.balance)}</div>
+                      <div className="font-mono-balance text-lg font-semibold">{hideBalances ? '••••' : formatCurrency(acct.balance)}</div>
                       <div className="text-[10px] text-muted-foreground">Available: {hideBalances ? '••••' : formatCurrency(acct.available)}</div>
                     </div>
                   </div>
