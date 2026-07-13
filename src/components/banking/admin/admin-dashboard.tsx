@@ -303,9 +303,6 @@ export function AdminDashboard() {
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <NotificationBell />
-                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => { logout().then(() => { window.location.href = '/'; }); }}>
-                  <LogOut className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Sign out</span>
-                </Button>
               </div>
             </div>
           </header>
@@ -403,9 +400,6 @@ export function AdminDashboard() {
                   <span className="text-sm hidden sm:block">{user.name}</span>
                 </div>
               )}
-              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => { logout().then(() => { window.location.href = '/'; }); }}>
-                <LogOut className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Sign out</span>
-              </Button>
             </div>
           </div>
         </header>

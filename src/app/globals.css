@@ -176,7 +176,7 @@
   letter-spacing: -0.01em;
 }
 
-/* Professional sans-serif monetary values — Inter, regular weight */
+/* Professional sans-serif monetary values — Inter, regular weight (not bold) */
 .font-mono-balance {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;

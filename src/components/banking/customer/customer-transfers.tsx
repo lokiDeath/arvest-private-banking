@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { formatCurrency, maskAccountNumber, formatDate } from '@/lib/store';
 import {
   ArrowLeftRight, ArrowRight, CheckCircle2, AlertCircle, Clock, Loader2,
-  User, Building2, Shield,
+  User, Building2, Shield, Send,
 } from 'lucide-react';
 
 interface Account {
@@ -59,7 +59,10 @@ export function CustomerTransfers({ onSuccess }: { onSuccess: () => void }) {
         const aData = await aRes.json();
         const tData = await tRes.json();
         setAccounts(aData.accounts || []);
-        setRecent((tData.transactions || []).filter((t: Transaction) => t.category === 'TRANSFER'));
+        setRecent((tData.transactions || []).filter((t: Transaction) =>
+          t.category === 'TRANSFER' ||
+          (t.category === 'PAYMENT' && t.counterparty && t.counterparty.includes('(Zelle)'))
+        ));
         if (aData.accounts?.[0]) {
           setFromAccountId(aData.accounts[0].id);
           if (aData.accounts[1]) setToAccountId(aData.accounts[1].id);
@@ -82,6 +85,15 @@ export function CustomerTransfers({ onSuccess }: { onSuccess: () => void }) {
     setRecipientAccount('');
     setRecipientRouting('');
     setConfirmOpen(false);
+    setLastResult(null);
+  }
+
+  // When user switches between "Between my accounts" and "To someone else",
+  // wipe the shared fields so the two modes never bleed into each other.
+  function switchTransferType(v: 'INTERNAL' | 'EXTERNAL') {
+    setTransferType(v);
+    setAmount('');
+    setMemo('');
     setLastResult(null);
   }
 
@@ -131,7 +143,10 @@ export function CustomerTransfers({ onSuccess }: { onSuccess: () => void }) {
       // Refresh recent transfers
       const tRes = await fetch('/api/transactions?limit=5');
       const tData = await tRes.json();
-      setRecent((tData.transactions || []).filter((t: Transaction) => t.category === 'TRANSFER'));
+      setRecent((tData.transactions || []).filter((t: Transaction) =>
+        t.category === 'TRANSFER' ||
+        (t.category === 'PAYMENT' && t.counterparty && t.counterparty.includes('(Zelle)'))
+      ));
       setTimeout(() => reset(), 3500);
     } finally {
       setSubmitting(false);
@@ -164,15 +179,18 @@ export function CustomerTransfers({ onSuccess }: { onSuccess: () => void }) {
             <CardDescription className="text-xs">Internal transfers are instant. External transfers may take 1–3 business days.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs value={transferType} onValueChange={(v) => setTransferType(v as 'INTERNAL' | 'EXTERNAL')}>
-              <TabsList className="grid w-full grid-cols-2 mb-5">
-                <TabsTrigger value="INTERNAL">
+            <Tabs value={transferType} onValueChange={(v) => switchTransferType(v as 'INTERNAL' | 'EXTERNAL')}>
+              <TabsList className="grid w-full grid-cols-2 mb-3 h-10">
+                <TabsTrigger value="INTERNAL" className="text-xs">
                   <Building2 className="w-3.5 h-3.5 mr-2" /> Between my accounts
                 </TabsTrigger>
-                <TabsTrigger value="EXTERNAL">
+                <TabsTrigger value="EXTERNAL" className="text-xs">
                   <User className="w-3.5 h-3.5 mr-2" /> To someone else
                 </TabsTrigger>
               </TabsList>
+
+              {/* Visible separator so the two modes never visually overlap */}
+              <div className="h-px bg-border mb-4" />
 
               <TabsContent value="INTERNAL" className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -317,28 +335,36 @@ export function CustomerTransfers({ onSuccess }: { onSuccess: () => void }) {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Recent transfers</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <ArrowLeftRight className="w-4 h-4" /> Recent transfers
+              </CardTitle>
+              <CardDescription className="text-xs">Includes internal, external &amp; Zelle</CardDescription>
             </CardHeader>
             <CardContent>
               {recent.length === 0 ? (
                 <div className="text-center text-xs text-muted-foreground py-6">No recent transfers</div>
               ) : (
-                <div className="space-y-2">
-                  {recent.slice(0, 5).map(t => (
-                    <div key={t.id} className="flex items-center gap-2 text-xs">
-                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                        <ArrowLeftRight className="w-3 h-3 text-primary" />
+                <div className="space-y-2 max-h-[400px] overflow-y-auto arvest-scroll">
+                  {recent.slice(0, 8).map(t => {
+                    const isZelle = t.counterparty && t.counterparty.includes('(Zelle)');
+                    return (
+                      <div key={t.id} className="flex items-center gap-2 text-xs p-2 rounded-md hover:bg-muted/50">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${isZelle ? 'bg-purple-100' : 'bg-primary/10'}`}>
+                          {isZelle
+                            ? <Send className="w-3 h-3 text-purple-600" />
+                            : <ArrowLeftRight className="w-3 h-3 text-primary" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{t.description}</div>
+                          <div className="text-muted-foreground">{formatDate(t.date)}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-medium">{formatCurrency(t.amount)}</div>
+                          <Badge variant="outline" className="text-[9px] h-3.5 px-1">{t.status}</Badge>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{t.description}</div>
-                        <div className="text-muted-foreground">{formatDate(t.date)}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-medium">{formatCurrency(t.amount)}</div>
-                        <Badge variant="outline" className="text-[9px] h-3.5 px-1">{t.status}</Badge>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

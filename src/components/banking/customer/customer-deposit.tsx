@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner';
 import { formatCurrency, maskAccountNumber, formatDate } from '@/lib/store';
 import {
-  ScanLine, CheckCircle2, Clock, Loader2, Image as ImageIcon, X, History, ArrowLeftRight, ArrowUpRight, ArrowDownLeft,
+  Smartphone, Camera, CheckCircle2, Clock, Loader2, Image as ImageIcon, X, History,
 } from 'lucide-react';
 
 interface Account {
@@ -25,13 +25,6 @@ interface Account {
 interface Deposit {
   id: string; accountId: string; amount: number; checkNumber: string | null;
   status: string; memo: string | null; createdAt: string;
-}
-
-interface Transfer {
-  id: string; amount: number; description: string; counterparty: string | null;
-  category: string; status: string; date: string; memo: string | null;
-  fromAccount: { id: string; nickname: string; accountNumber: string } | null;
-  toAccount: { id: string; nickname: string; accountNumber: string } | null;
 }
 
 // Compress image to JPEG data URL ~800px max, quality 0.7
@@ -68,7 +61,6 @@ function compressImage(file: File, maxSize = 800, quality = 0.7): Promise<string
 export function CustomerDeposit({ onSuccess }: { onSuccess: () => void }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [deposits, setDeposits] = useState<Deposit[]>([]);
-  const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -81,17 +73,14 @@ export function CustomerDeposit({ onSuccess }: { onSuccess: () => void }) {
 
   async function load() {
     try {
-      const [aRes, dRes, tRes] = await Promise.all([
+      const [aRes, dRes] = await Promise.all([
         fetch('/api/accounts'),
         fetch('/api/check-deposit'),
-        fetch('/api/transactions?limit=8'),
       ]);
       const aData = await aRes.json();
       const dData = await dRes.json();
-      const tData = await tRes.json();
       setAccounts(aData.accounts || []);
       setDeposits(dData.deposits || []);
-      setTransfers((tData.transactions || []).filter((t: Transfer) => t.category === 'TRANSFER' || t.category === 'DEPOSIT'));
       if (aData.accounts?.[0]) setAccountId(aData.accounts[0].id);
     } finally {
       setLoading(false);
@@ -161,7 +150,7 @@ export function CustomerDeposit({ onSuccess }: { onSuccess: () => void }) {
     <div className="space-y-6">
       <div>
         <h1 className="font-serif-display text-2xl mb-1 flex items-center gap-2">
-          <ScanLine className="w-6 h-6 text-primary" /> Mobile Deposit
+          <Smartphone className="w-6 h-6 text-primary" /> Mobile Deposit
         </h1>
         <p className="text-sm text-muted-foreground">Deposit checks from your phone. Deposits are reviewed by your banker before funds are released.</p>
       </div>
@@ -198,7 +187,6 @@ export function CustomerDeposit({ onSuccess }: { onSuccess: () => void }) {
               </div>
             </div>
 
-            {/* Scan-style upload boxes */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Front of check</Label>
@@ -210,10 +198,10 @@ export function CustomerDeposit({ onSuccess }: { onSuccess: () => void }) {
                     </button>
                   </div>
                 ) : (
-                  <label className="flex flex-col items-center justify-center gap-1 h-32 rounded-md border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors bg-muted/20">
-                    <ScanLine className="w-6 h-6 text-primary" />
-                    <span className="text-[11px] text-muted-foreground">Tap to scan</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e, 'front')} />
+                  <label className="flex flex-col items-center justify-center gap-1 h-32 rounded-md border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors">
+                    <Camera className="w-5 h-5 text-muted-foreground" />
+                    <span className="text-[11px] text-muted-foreground">Tap to upload</span>
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleImageChange(e, 'front')} />
                   </label>
                 )}
               </div>
@@ -227,10 +215,10 @@ export function CustomerDeposit({ onSuccess }: { onSuccess: () => void }) {
                     </button>
                   </div>
                 ) : (
-                  <label className="flex flex-col items-center justify-center gap-1 h-32 rounded-md border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors bg-muted/20">
-                    <ScanLine className="w-6 h-6 text-primary" />
-                    <span className="text-[11px] text-muted-foreground">Tap to scan</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e, 'back')} />
+                  <label className="flex flex-col items-center justify-center gap-1 h-32 rounded-md border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors">
+                    <Camera className="w-5 h-5 text-muted-foreground" />
+                    <span className="text-[11px] text-muted-foreground">Tap to upload</span>
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleImageChange(e, 'back')} />
                   </label>
                 )}
               </div>
@@ -253,78 +241,41 @@ export function CustomerDeposit({ onSuccess }: { onSuccess: () => void }) {
           </CardContent>
         </Card>
 
-        {/* Right side: Deposit history + Recent transfers */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2"><History className="w-4 h-4" /> Deposit History</CardTitle>
-              <CardDescription className="text-xs">Your recent mobile deposits</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-[240px] overflow-y-auto arvest-scroll">
-                {deposits.length === 0 ? (
-                  <div className="text-center py-8 text-sm text-muted-foreground">
-                    <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    No deposits yet
-                  </div>
-                ) : deposits.map((d) => {
-                  const acct = accounts.find(a => a.id === d.accountId);
-                  return (
-                    <div key={d.id} className="flex items-center gap-3 p-3 rounded-md border border-border">
-                      <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-                        <ScanLine className="w-4 h-4 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">{formatCurrency(d.amount)}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {acct?.nickname || '—'} · {formatDate(d.createdAt)}
-                          {d.checkNumber && ` · #${d.checkNumber}`}
-                        </div>
-                      </div>
-                      <Badge variant={d.status === 'POSTED' || d.status === 'APPROVED' ? 'default' : d.status === 'PENDING' ? 'secondary' : 'outline'} className="text-[10px]">
-                        {d.status}
-                      </Badge>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2"><History className="w-4 h-4" /> Deposit History</CardTitle>
+            <CardDescription className="text-xs">Your recent mobile deposits</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-[500px] overflow-y-auto arvest-scroll">
+              {deposits.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  No deposits yet
+                </div>
+              ) : deposits.map((d) => {
+                const acct = accounts.find(a => a.id === d.accountId);
+                return (
+                  <div key={d.id} className="flex items-center gap-3 p-3 rounded-md border border-border">
+                    <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
+                      <Smartphone className="w-4 h-4 text-primary" />
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent transfers section */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2"><ArrowLeftRight className="w-4 h-4" /> Recent Transfers</CardTitle>
-              <CardDescription className="text-xs">Your latest account activity</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-[240px] overflow-y-auto arvest-scroll">
-                {transfers.length === 0 ? (
-                  <div className="text-center py-8 text-sm text-muted-foreground">
-                    <ArrowLeftRight className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    No recent transfers
-                  </div>
-                ) : transfers.map((t) => {
-                  const isCredit = !!t.toAccount;
-                  return (
-                    <div key={t.id} className="flex items-center gap-3 p-3 rounded-md border border-border">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isCredit ? 'bg-emerald-100 text-emerald-700' : 'bg-primary/10 text-primary'}`}>
-                        {isCredit ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{t.description}</div>
-                        <div className="text-[11px] text-muted-foreground">{formatDate(t.date)}</div>
-                      </div>
-                      <div className={`text-sm ${isCredit ? 'text-emerald-700' : ''}`}>
-                        {isCredit ? '+' : '−'}{formatCurrency(t.amount)}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">{formatCurrency(d.amount)}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {acct?.nickname || '—'} · {formatDate(d.createdAt)}
+                        {d.checkNumber && ` · #${d.checkNumber}`}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                    <Badge variant={d.status === 'POSTED' || d.status === 'APPROVED' ? 'default' : d.status === 'PENDING' ? 'secondary' : 'outline'} className="text-[10px]">
+                      {d.status}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

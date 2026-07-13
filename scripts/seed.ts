@@ -232,7 +232,7 @@ async function main() {
       fromAccountId: chrisChecking.id, toAccountId: null, userId: chris.id,
       amount: 450.00, description: 'Zelle to Sarah Johnson',
       category: 'PAYMENT', status: 'PENDING',
-      counterparty: 'Sarah Johnson', memo: 'Dinner split', date: new Date(),
+      counterparty: 'Sarah Johnson (Zelle)', memo: 'Dinner split', date: new Date(),
     },
   });
   await db.transaction.create({
@@ -243,6 +243,94 @@ async function main() {
       counterparty: 'State Farm Insurance', memo: 'Monthly auto insurance', date: new Date(),
     },
   });
+
+  // ===== MOBILE DEPOSIT HISTORY (from 2024 onwards — looks realistic, not too many) =====
+  // ~12 deposits spread across 2 years, mostly to Checking, a few to Savings
+  const depositHistory = [
+    { amount: 1250.00, checkNum: '1042', daysBack: 18, status: 'POSTED', account: 'checking', memo: 'Client retainer check' },
+    { amount: 850.50, checkNum: '1043', daysBack: 45, status: 'POSTED', account: 'checking', memo: 'Birthday gift' },
+    { amount: 2400.00, checkNum: '1044', daysBack: 72, status: 'POSTED', account: 'savings', memo: 'Tax refund deposit' },
+    { amount: 500.00, checkNum: '1045', daysBack: 95, status: 'POSTED', account: 'checking', memo: 'Refund from contractor' },
+    { amount: 1750.25, checkNum: '1046', daysBack: 130, status: 'POSTED', account: 'checking', memo: 'Consulting fee' },
+    { amount: 3200.00, checkNum: '1047', daysBack: 165, status: 'POSTED', account: 'savings', memo: 'Quarterly bonus' },
+    { amount: 675.00, checkNum: '1048', daysBack: 210, status: 'POSTED', account: 'checking', memo: 'Insurance reimbursement' },
+    { amount: 980.00, checkNum: '1049', daysBack: 260, status: 'POSTED', account: 'checking', memo: 'Sold camera gear' },
+    { amount: 1500.00, checkNum: '1050', daysBack: 320, status: 'POSTED', account: 'savings', memo: 'Wedding gift' },
+    { amount: 2200.00, checkNum: '1051', daysBack: 380, status: 'POSTED', account: 'checking', memo: 'Freelance project payment' },
+    { amount: 410.75, checkNum: '1052', daysBack: 450, status: 'POSTED', account: 'checking', memo: 'Rebate check' },
+    { amount: 1850.00, checkNum: '1053', daysBack: 520, status: 'POSTED', account: 'savings', memo: 'Sold vintage watch' },
+    { amount: 760.00, checkNum: '1054', daysBack: 600, status: 'POSTED', account: 'checking', memo: 'Refund from airline' },
+    { amount: 2950.00, checkNum: '1055', daysBack: 680, status: 'POSTED', account: 'savings', memo: 'Inheritance distribution' },
+  ];
+
+  for (const d of depositHistory) {
+    const acct = d.account === 'savings' ? chrisSavings : chrisChecking;
+    await db.checkDeposit.create({
+      data: {
+        userId: chris.id,
+        accountId: acct.id,
+        amount: d.amount,
+        checkNumber: d.checkNum,
+        frontImage: null,
+        backImage: null,
+        status: d.status,
+        memo: d.memo,
+        createdAt: daysAgo(d.daysBack),
+      },
+    });
+  }
+
+  // ===== ZELLE TRANSFER HISTORY (from 2024 onwards — realistic, looks like real usage) =====
+  // ~10 zelle transfers to various friends/family over 2 years
+  const zelleHistory = [
+    { name: 'Sarah Johnson', email: 'sarah.j@gmail.com', amount: 450.00, daysBack: 5, status: 'POSTED', memo: 'Dinner split' },
+    { name: 'Michael Chen', email: 'mike.chen@yahoo.com', amount: 250.00, daysBack: 22, status: 'POSTED', memo: 'Concert tickets' },
+    { name: 'Mom', phone: '+1 (615) 555-0142', amount: 1000.00, daysBack: 38, status: 'POSTED', memo: 'Birthday gift' },
+    { name: 'Jessica Brown', email: 'jess.brown@gmail.com', amount: 75.00, daysBack: 55, status: 'POSTED', memo: 'Lunch' },
+    { name: 'David Wilson', email: 'd.wilson@outlook.com', amount: 320.00, daysBack: 85, status: 'POSTED', memo: 'Moving help' },
+    { name: 'Sarah Johnson', email: 'sarah.j@gmail.com', amount: 180.00, daysBack: 120, status: 'POSTED', memo: 'Vacation split' },
+    { name: 'Alex Martinez', phone: '+1 (615) 555-0188', amount: 600.00, daysBack: 165, status: 'POSTED', memo: 'Loan repayment' },
+    { name: 'Emily Davis', email: 'emily.davis@gmail.com', amount: 95.00, daysBack: 200, status: 'POSTED', memo: 'Gift' },
+    { name: 'Michael Chen', email: 'mike.chen@yahoo.com', amount: 410.00, daysBack: 280, status: 'POSTED', memo: 'Shared rent' },
+    { name: 'Robert Lee', phone: '+1 (615) 555-0199', amount: 220.00, daysBack: 340, status: 'POSTED', memo: 'Sports tickets' },
+    { name: 'Sarah Johnson', email: 'sarah.j@gmail.com', amount: 350.00, daysBack: 420, status: 'POSTED', memo: 'Holiday gift exchange' },
+    { name: 'Mom', phone: '+1 (615) 555-0142', amount: 500.00, daysBack: 500, status: 'POSTED', memo: 'Mothers day' },
+    { name: 'Jessica Brown', email: 'jess.brown@gmail.com', amount: 125.00, daysBack: 580, status: 'POSTED', memo: 'Birthday dinner' },
+    { name: 'David Wilson', email: 'd.wilson@outlook.com', amount: 275.00, daysBack: 660, status: 'POSTED', memo: 'Furniture split' },
+  ];
+
+  for (const z of zelleHistory) {
+    // Create the ZelleTransfer record
+    await db.zelleTransfer.create({
+      data: {
+        userId: chris.id,
+        fromAccountId: chrisChecking.id,
+        recipientName: z.name,
+        recipientEmail: z.email || null,
+        recipientPhone: z.phone || null,
+        amount: z.amount,
+        memo: z.memo,
+        status: z.status,
+        createdAt: daysAgo(z.daysBack),
+      },
+    });
+
+    // Also create a matching Transaction so it shows in account history & recent transfers
+    await db.transaction.create({
+      data: {
+        fromAccountId: chrisChecking.id,
+        toAccountId: null,
+        userId: chris.id,
+        amount: z.amount,
+        description: `Zelle to ${z.name}`,
+        category: 'PAYMENT',
+        status: z.status,
+        counterparty: `${z.name} (Zelle)`,
+        memo: z.memo,
+        date: daysAgo(z.daysBack),
+      },
+    });
+  }
 
   // ===== NOTIFICATIONS for Christopher (past + recent) =====
   const notifTypes = [
@@ -323,6 +411,7 @@ async function main() {
   });
 
   console.log(`✅ Seed v5 completed. ${txCount} transactions created for Christopher.`);
+  console.log(`   ${depositHistory.length} mobile deposits + ${zelleHistory.length} Zelle transfers added.`);
   console.log('   Admin: LUCIAN1975 / PASSWORD@@1975');
   console.log('   Christopher: christopher111 / 1975@1975');
   console.log('   Christopher balance: $80,000 (Checking $25K + Savings $30K + Reserve $25K)');

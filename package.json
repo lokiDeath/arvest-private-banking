@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
+    "db:seed": "npx tsx scripts/seed.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -80,6 +81,7 @@
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
+    "tsx": "^4.19.0",
     "typescript": "^5"
   }
 }
