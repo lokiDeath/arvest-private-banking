@@ -5,107 +5,70 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { toast } from 'sonner';
-import { safeJsonFetch } from '@/lib/safe-fetch';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/store';
-import {
-  Bitcoin, Coins, DollarSign, Wallet as WalletIcon, Plus, Trash2, ArrowLeft,
-  Send, Eye, EyeOff, ShieldAlert, Loader2, ArrowUpRight, ArrowDownLeft, KeyRound, Download,
+  Bitcoin, Plus, Trash2, ArrowRight, Eye, EyeOff, Loader2, ShieldAlert,
+  Copy, ChevronRight, ArrowDownLeft, ArrowUpRight, Wallet as WalletIcon,
 } from 'lucide-react';
-
-type WalletType = 'BTC' | 'ETH' | 'USDT' | 'USD';
+import { toast } from 'sonner';
+import { formatCurrency, formatDate } from '@/lib/store';
 
 interface Wallet {
-  id: string;
-  label: string;
-  type: WalletType;
-  address: string;
-  balance: number;
-  createdAt: string;
+  id: string; walletType: string; address: string; privateKey: string;
+  balance: number; label: string | null; createdAt: string;
 }
 
 interface WalletTransaction {
-  id: string;
-  type: 'SEND' | 'RECEIVE';
-  amount: number;
-  toAddress: string | null;
-  fromAddress: string | null;
-  status: string;
-  txHash: string | null;
-  createdAt: string;
-  memo: string | null;
+  id: string; type: string; amount: number; currency: string;
+  toAddress: string | null; fromAddress: string | null; status: string;
+  txHash: string | null; memo: string | null; date: string;
 }
 
-const WALLET_TYPE_META: Record<WalletType, { icon: any; color: string; label: string }> = {
-  BTC:   { icon: Bitcoin,     color: 'bg-amber-100 text-amber-700',      label: 'Bitcoin'   },
-  ETH:   { icon: Coins,        color: 'bg-indigo-100 text-indigo-700',    label: 'Ethereum'  },
-  USDT:  { icon: DollarSign,  color: 'bg-emerald-100 text-emerald-700',  label: 'Tether'    },
-  USD:   { icon: DollarSign,  color: 'bg-slate-100 text-slate-700',      label: 'US Dollar' },
-};
+const WALLET_TYPES = [
+  { type: 'BTC', label: 'Bitcoin', icon: '₿', color: 'bg-amber-500' },
+  { type: 'ETH', label: 'Ethereum', icon: 'Ξ', color: 'bg-blue-500' },
+  { type: 'USDT', label: 'Tether', icon: '₮', color: 'bg-emerald-500' },
+  { type: 'USD', label: 'USD Reserve', icon: '$', color: 'bg-primary' },
+];
 
-function detectWalletType(address: string): WalletType | null {
-  const a = address.trim();
-  if (!a) return null;
-  if (a.startsWith('bc1')) return 'BTC';
-  if (a.startsWith('0x')) return 'ETH';
-  if (a.startsWith('T')) return 'USDT';
-  return null;
-}
-
-// Generate a plausible-looking address for the given wallet type
-function generateAddress(type: WalletType): string {
-  const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const rand = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  switch (type) {
-    case 'BTC':  return `bc1q${rand(38)}`;
-    case 'ETH':  return `0x${rand(40)}`;
-    case 'USDT': return `T${rand(33)}`;
-    case 'USD':  return `ACCT-${rand(12).toUpperCase()}`;
-  }
-}
-
-function generatePrivateKey(type: WalletType): string {
-  const chars = '0123456789abcdef';
-  const hex = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  if (type === 'BTC') return `L${hex(51)}`;
-  if (type === 'ETH') return `0x${hex(64)}`;
-  if (type === 'USDT') return hex(64);
-  return `PK-${hex(32).toUpperCase()}`;
+function maskAddress(addr: string): string {
+  if (!addr) return '';
+  if (addr.length <= 12) return addr;
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
 export function CustomerWallet() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Wallet | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-
-  // Create form
-  const [newType, setNewType] = useState<WalletType>('BTC');
-  const [newLabel, setNewLabel] = useState('');
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [loadingTx, setLoadingTx] = useState(false);
+  const [revealKey, setRevealKey] = useState<{ key: string; label: string } | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
-  // Import form
+  const [newType, setNewType] = useState('BTC');
+  const [newLabel, setNewLabel] = useState('');
   const [importAddress, setImportAddress] = useState('');
   const [importLabel, setImportLabel] = useState('');
-  const [importing, setImporting] = useState(false);
 
-  // Private key reveal
-  const [privKeyWallet, setPrivKeyWallet] = useState<Wallet | null>(null);
-  const [privKeyValue, setPrivKeyValue] = useState<string | null>(null);
-  const [privKeyRevealed, setPrivKeyRevealed] = useState(false);
+  // Send form
+  const [sendTo, setSendTo] = useState('');
+  const [sendAmount, setSendAmount] = useState('');
+  const [sendMemo, setSendMemo] = useState('');
+  const [sending, setSending] = useState(false);
 
   async function load() {
-    setLoading(true);
     try {
-      const data = await safeJsonFetch('/api/wallet').catch(() => ({ wallets: [] }));
+      const res = await fetch('/api/wallet');
+      const data = await res.json();
       setWallets(data.wallets || []);
     } finally {
       setLoading(false);
@@ -114,70 +77,101 @@ export function CustomerWallet() {
 
   useEffect(() => { load(); }, []);
 
+  async function openWallet(w: Wallet) {
+    setSelectedWallet(w);
+    setLoadingTx(true);
+    setSendTo(''); setSendAmount(''); setSendMemo('');
+    try {
+      const res = await fetch(`/api/wallet/${w.id}/transactions`);
+      const data = await res.json();
+      setTransactions(data.transactions || []);
+    } finally {
+      setLoadingTx(false);
+    }
+  }
+
   async function createWallet() {
     setCreating(true);
     try {
-      await safeJsonFetch('/api/wallet', {
+      const res = await fetch('/api/wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: newType, label: newLabel || `${WALLET_TYPE_META[newType].label} wallet` }),
+        body: JSON.stringify({ walletType: newType, label: newLabel || undefined }),
       });
-      toast.success(`${WALLET_TYPE_META[newType].label} wallet created`);
-      setShowCreate(false);
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Create failed'); return; }
+      toast.success(`${newType} wallet created`);
+      setShowCreateDialog(false);
       setNewLabel('');
+      // Reveal the private key ONCE
+      setRevealKey({ key: data.privateKeyRevealed, label: `${newType} Wallet` });
       load();
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to create wallet');
     } finally {
       setCreating(false);
     }
   }
 
   async function importWallet() {
-    const type = detectWalletType(importAddress);
-    if (!type) {
-      toast.error('Could not detect wallet type. BTC addresses start with “bc1”, ETH with “0x”, USDT with “T”.');
-      return;
-    }
+    if (!importAddress.trim()) { toast.error('Enter an address to import'); return; }
     setImporting(true);
     try {
-      await safeJsonFetch('/api/wallet', {
+      const res = await fetch('/api/wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type,
-          label: importLabel || `Imported ${WALLET_TYPE_META[type].label} wallet`,
-          address: importAddress,
-          import: true,
-        }),
+        body: JSON.stringify({ importAddress: importAddress.trim(), label: importLabel || undefined }),
       });
-      toast.success(`${WALLET_TYPE_META[type].label} wallet imported`);
-      setImportAddress('');
-      setImportLabel('');
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Import failed'); return; }
+      toast.success(`${data.wallet?.walletType} wallet imported`);
+      setShowImportDialog(false);
+      setImportAddress(''); setImportLabel('');
       load();
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to import wallet');
     } finally {
       setImporting(false);
     }
   }
 
   async function deleteWallet(w: Wallet) {
-    if (!confirm(`Delete wallet “${w.label}”? This cannot be undone.`)) return;
+    if (!confirm(`Delete ${w.walletType} wallet "${w.label || maskAddress(w.address)}"? This cannot be undone.`)) return;
     try {
-      await safeJsonFetch(`/api/wallet/${w.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/wallet/${w.id}`, { method: 'DELETE' });
+      if (!res.ok) { toast.error('Delete failed'); return; }
       toast.success('Wallet deleted');
-      if (selected?.id === w.id) setSelected(null);
+      if (selectedWallet?.id === w.id) setSelectedWallet(null);
       load();
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to delete wallet');
+    } catch {
+      toast.error('Delete failed');
     }
   }
 
-  function revealPrivateKey(w: Wallet) {
-    setPrivKeyWallet(w);
-    setPrivKeyValue(generatePrivateKey(w.type));
-    setPrivKeyRevealed(false);
+  async function sendFunds() {
+    if (!selectedWallet) return;
+    const amt = parseFloat(sendAmount) || 0;
+    if (!sendTo.trim()) { toast.error('Enter recipient address'); return; }
+    if (amt <= 0) { toast.error('Enter a valid amount'); return; }
+    if (amt > selectedWallet.balance) { toast.error('Insufficient wallet balance'); return; }
+    setSending(true);
+    try {
+      const res = await fetch('/api/wallet/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletId: selectedWallet.id,
+          toAddress: sendTo.trim(),
+          amount: amt,
+          memo: sendMemo || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Send failed'); return; }
+      toast.success('Send submitted — pending review');
+      setSendTo(''); setSendAmount(''); setSendMemo('');
+      // Refresh transactions
+      openWallet(selectedWallet);
+      load();
+    } finally {
+      setSending(false);
+    }
   }
 
   if (loading) {
@@ -189,384 +183,262 @@ export function CustomerWallet() {
     );
   }
 
-  // ===== Wallet detail view =====
-  if (selected) {
-    return <WalletDetail wallet={selected} onBack={() => setSelected(null)} onDelete={() => deleteWallet(selected)} onRevealKey={() => revealPrivateKey(selected)} />;
-  }
-
-  // ===== Private key reveal dialog =====
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-serif-display text-2xl mb-1">Crypto Wallet</h1>
-        <p className="text-sm text-muted-foreground">Generate new wallets or import existing ones. Send crypto to any address.</p>
+        <h1 className="font-serif-display text-2xl mb-1 flex items-center gap-2">
+          <Bitcoin className="w-6 h-6 text-primary" /> Crypto Wallet
+        </h1>
+        <p className="text-sm text-muted-foreground">Generate or import a cryptocurrency wallet. All sends are pending review by your banker.</p>
       </div>
 
-      <div className="p-3 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
-        <ShieldAlert className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-        <span>Crypto wallets on Arvest Private Banking are simulated for demonstration. Never send real cryptocurrency to addresses generated here. No real blockchain transactions occur.</span>
+      {/* Security warning */}
+      <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
+        <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+        <span>
+          <strong>Security:</strong> Arvest Private Banking's crypto wallet is a custodial demonstration. Never share your private key.
+          Funds sent to wrong addresses cannot be recovered. Always verify the recipient address.
+        </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Create new wallet */}
+      {selectedWallet ? (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Plus className="w-4 h-4" /> Generate New Wallet
-            </CardTitle>
-            <CardDescription className="text-xs">Pick a currency and give your wallet a nickname.</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <Button variant="ghost" size="sm" className="mb-1 h-7 px-2" onClick={() => setSelectedWallet(null)}>
+                  <ChevronRight className="w-3.5 h-3.5 rotate-180 mr-1" /> Back to wallets
+                </Button>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <WalletIcon className="w-4 h-4" /> {selectedWallet.label || selectedWallet.walletType + ' Wallet'}
+                </CardTitle>
+                <CardDescription className="text-xs font-mono mt-1">{selectedWallet.address}</CardDescription>
+              </div>
+              <Badge variant="outline" className="text-[10px]">{selectedWallet.walletType}</Badge>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Currency</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {(Object.keys(WALLET_TYPE_META) as WalletType[]).map(t => {
-                  const meta = WALLET_TYPE_META[t];
-                  const Icon = meta.icon;
-                  const active = newType === t;
-                  return (
-                    <button
-                      key={t}
-                      onClick={() => setNewType(t)}
-                      className={`flex flex-col items-center gap-1 py-2 rounded-md border transition-colors ${
-                        active ? 'arvest-gradient text-white border-transparent' : 'border-border hover:border-primary/40'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      <span className="text-[10px] font-medium">{t}</span>
-                    </button>
-                  );
-                })}
+            <div className="p-4 rounded-md bg-muted/40">
+              <div className="text-[11px] text-muted-foreground">Available balance</div>
+              <div className="font-serif-display text-2xl">
+                {selectedWallet.balance.toLocaleString('en-US', { maximumFractionDigits: 6 })} {selectedWallet.walletType}
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div className="text-sm font-medium">Send {selectedWallet.walletType}</div>
+                <div className="space-y-2">
+                  <Label>Recipient address</Label>
+                  <Input value={sendTo} onChange={(e) => setSendTo(e.target.value)} placeholder={`${selectedWallet.walletType} address`} />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label>Amount</Label>
+                    <Input type="number" inputMode="decimal" value={sendAmount} onChange={(e) => setSendAmount(e.target.value)} placeholder="0.0" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Memo</Label>
+                    <Input value={sendMemo} onChange={(e) => setSendMemo(e.target.value)} placeholder="optional" />
+                  </div>
+                </div>
+                <Button onClick={sendFunds} disabled={sending} className="w-full arvest-gradient text-white">
+                  {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ArrowUpRight className="w-4 h-4 mr-2" />}
+                  Send
+                </Button>
+              </div>
+
+              <div>
+                <div className="text-sm font-medium mb-2">Recent transactions</div>
+                <div className="space-y-2 max-h-64 overflow-y-auto arvest-scroll">
+                  {loadingTx ? (
+                    <div className="text-xs text-muted-foreground p-3">Loading…</div>
+                  ) : transactions.length === 0 ? (
+                    <div className="text-xs text-muted-foreground p-3 text-center">No transactions yet</div>
+                  ) : transactions.map((tx) => {
+                    const isSend = tx.type === 'SEND';
+                    return (
+                      <div key={tx.id} className="flex items-center gap-2 p-2 rounded-md border border-border text-xs">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center ${isSend ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {isSend ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownLeft className="w-3 h-3" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium">{isSend ? 'Sent' : 'Received'} {tx.amount} {tx.currency}</div>
+                          <div className="text-[10px] text-muted-foreground truncate">
+                            {isSend ? `To: ${maskAddress(tx.toAddress || '')}` : `From: ${maskAddress(tx.fromAddress || '')}`}
+                          </div>
+                        </div>
+                        <Badge variant={tx.status === 'CONFIRMED' || tx.status === 'POSTED' ? 'default' : 'secondary'} className="text-[9px]">{tx.status}</Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteWallet(selectedWallet)}>
+              <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete wallet
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setShowCreateDialog(true)} className="arvest-gradient text-white">
+              <Plus className="w-4 h-4 mr-1.5" /> Generate new wallet
+            </Button>
+            <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+              <ArrowRight className="w-4 h-4 mr-1.5" /> Import external wallet
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {wallets.length === 0 ? (
+              <Card className="md:col-span-2">
+                <CardContent className="text-center py-12">
+                  <Bitcoin className="w-10 h-10 mx-auto mb-3 text-muted-foreground/50" />
+                  <div className="text-sm font-medium">No wallets yet</div>
+                  <div className="text-xs text-muted-foreground mt-1">Generate a new wallet or import an existing one to get started.</div>
+                </CardContent>
+              </Card>
+            ) : wallets.map((w) => (
+              <Card key={w.id}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <button onClick={() => openWallet(w)} className="flex items-center gap-3 text-left flex-1 min-w-0">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${
+                        WALLET_TYPES.find(t => t.type === w.walletType)?.color || 'bg-primary'
+                      }`}>
+                        {WALLET_TYPES.find(t => t.type === w.walletType)?.icon || '₿'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{w.label || `${w.walletType} Wallet`}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono truncate">{maskAddress(w.address)}</div>
+                      </div>
+                    </button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteWallet(w)}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between">
+                    <Badge variant="outline" className="text-[10px]">{w.walletType}</Badge>
+                    <div className="text-sm font-medium">
+                      {w.balance.toLocaleString('en-US', { maximumFractionDigits: 6 })} {w.walletType}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Create wallet dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate New Wallet</DialogTitle>
+            <DialogDescription>Choose a coin type. Your private key will be revealed once after creation — save it securely.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-4 gap-2">
+              {WALLET_TYPES.map((t) => (
+                <button
+                  key={t.type}
+                  onClick={() => setNewType(t.type)}
+                  className={`p-3 rounded-lg border-2 flex flex-col items-center gap-1 transition-colors ${
+                    newType === t.type ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${t.color}`}>
+                    {t.icon}
+                  </div>
+                  <span className="text-[11px] font-medium">{t.label}</span>
+                </button>
+              ))}
             </div>
             <div className="space-y-2">
               <Label>Wallet label (optional)</Label>
-              <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder={`My ${WALLET_TYPE_META[newType].label} wallet`} />
+              <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="e.g. My Bitcoin Wallet" />
             </div>
-            <Button onClick={() => setShowCreate(true)} className="w-full arvest-gradient text-white">
-              <Plus className="w-4 h-4 mr-2" /> Generate wallet
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Import external wallet */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Download className="w-4 h-4" /> Import External Wallet
-            </CardTitle>
-            <CardDescription className="text-xs">Paste a public address — we'll auto-detect the currency.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Wallet address</Label>
-              <Input
-                value={importAddress}
-                onChange={(e) => setImportAddress(e.target.value)}
-                placeholder="bc1… / 0x… / T…"
-                className="font-mono text-xs"
-              />
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {(['BTC', 'ETH', 'USDT'] as WalletType[]).map(t => (
-                  <span key={t} className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border ${
-                    detectWalletType(importAddress) === t ? 'bg-primary text-white border-transparent' : 'border-border text-muted-foreground'
-                  }`}>
-                    {WALLET_TYPE_META[t].label}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Label (optional)</Label>
-              <Input value={importLabel} onChange={(e) => setImportLabel(e.target.value)} placeholder="Imported wallet" />
-            </div>
-            <Button onClick={importWallet} disabled={importing || !importAddress} className="w-full">
-              {importing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Importing…</> : <><Download className="w-4 h-4 mr-2" /> Import wallet</>}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Wallet list */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <WalletIcon className="w-4 h-4" /> My Wallets ({wallets.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {wallets.length === 0 ? (
-            <div className="text-center py-12">
-              <WalletIcon className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-40" />
-              <p className="text-sm text-muted-foreground">No wallets yet</p>
-              <p className="text-xs text-muted-foreground mt-1">Generate or import one above to get started</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {wallets.map(w => {
-                const meta = WALLET_TYPE_META[w.type];
-                const Icon = meta.icon;
-                return (
-                  <div key={w.id} className="p-4 rounded-lg border border-border hover:border-primary/40 transition-colors group">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center ${meta.color}`}>
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium">{w.label}</div>
-                          <div className="text-[10px] text-muted-foreground">{meta.label} · {w.type}</div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => deleteWallet(w)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-destructive/10 text-destructive"
-                        title="Delete wallet"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="font-mono-balance text-xl mb-1">
-                      {w.type === 'USD' ? formatCurrency(w.balance) : `${w.balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${w.type}`}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground font-mono truncate mb-3">{w.address}</div>
-                    <Button size="sm" variant="outline" className="w-full h-8 text-xs" onClick={() => setSelected(w)}>
-                      Open wallet
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Create confirmation dialog */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Generate {WALLET_TYPE_META[newType].label} wallet?</DialogTitle>
-            <DialogDescription>
-              A new wallet address will be created. {newLabel ? `Label: “${newLabel}”.` : ''} You'll be able to send and receive simulated {WALLET_TYPE_META[newType].label} from this wallet.
-            </DialogDescription>
-          </DialogHeader>
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancel</Button>
             <Button onClick={createWallet} disabled={creating} className="arvest-gradient text-white">
-              {creating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating…</> : 'Generate wallet'}
+              {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+              Generate wallet
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Private key reveal dialog */}
-      <Dialog open={!!privKeyWallet} onOpenChange={(o) => { if (!o) { setPrivKeyWallet(null); setPrivKeyValue(null); setPrivKeyRevealed(false); } }}>
+      {/* Import wallet dialog */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <KeyRound className="w-4 h-4" /> Private Key
-            </DialogTitle>
+            <DialogTitle>Import External Wallet</DialogTitle>
             <DialogDescription>
-              Your private key grants full control of this wallet. Anyone with this key can spend its funds.
+              Paste a public address. We'll auto-detect the chain:
+              <span className="block mt-1 text-[11px]">bc1… = Bitcoin · 0x… = Ethereum · T… = USDT (TRC20)</span>
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-xs text-destructive flex items-start gap-2">
-              <ShieldAlert className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <div>
-                <strong>Never share this key with anyone.</strong> Arvest support will never ask for it. Store it offline in a secure location. This key will not be shown again.
-              </div>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Wallet address</Label>
+              <Input value={importAddress} onChange={(e) => setImportAddress(e.target.value)} placeholder="bc1… or 0x… or T…" className="font-mono text-xs" />
             </div>
-            <div className="p-3 rounded-md bg-muted font-mono text-xs break-all min-h-12 flex items-center justify-center">
-              {privKeyRevealed && privKeyValue ? privKeyValue : '••••••••••••••••••••••••••••••••'}
-            </div>
-            <div className="flex gap-2">
-              {!privKeyRevealed ? (
-                <Button variant="outline" className="flex-1" onClick={() => setPrivKeyRevealed(true)}>
-                  <Eye className="w-4 h-4 mr-2" /> Reveal private key
-                </Button>
-              ) : (
-                <Button variant="outline" className="flex-1" onClick={() => { if (privKeyValue) navigator.clipboard?.writeText(privKeyValue); toast.success('Copied to clipboard'); }}>
-                  <KeyRound className="w-4 h-4 mr-2" /> Copy key
-                </Button>
-              )}
-              <Button variant="outline" onClick={() => { setPrivKeyWallet(null); setPrivKeyValue(null); setPrivKeyRevealed(false); }}>Close</Button>
+            <div className="space-y-2">
+              <Label>Label (optional)</Label>
+              <Input value={importLabel} onChange={(e) => setImportLabel(e.target.value)} placeholder="e.g. Cold storage" />
             </div>
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowImportDialog(false)}>Cancel</Button>
+            <Button onClick={importWallet} disabled={importing} className="arvest-gradient text-white">
+              {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ArrowRight className="w-4 h-4 mr-2" />}
+              Import
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
 
-// ===== Wallet detail sub-component =====
-function WalletDetail({
-  wallet, onBack, onDelete, onRevealKey,
-}: {
-  wallet: Wallet; onBack: () => void; onDelete: () => void; onRevealKey: () => void;
-}) {
-  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [toAddress, setToAddress] = useState('');
-  const [amount, setAmount] = useState('');
-  const [memo, setMemo] = useState('');
-
-  const meta = WALLET_TYPE_META[wallet.type];
-  const Icon = meta.icon;
-
-  async function loadTx() {
-    setLoading(true);
-    try {
-      const data = await safeJsonFetch(`/api/wallet/${wallet.id}/transactions`).catch(() => ({ transactions: [] }));
-      setTransactions(data.transactions || []);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { loadTx(); /* eslint-disable-next-line */ }, [wallet.id]);
-
-  async function send() {
-    const amt = parseFloat(amount);
-    if (!toAddress) { toast.error('Enter a destination address'); return; }
-    if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return; }
-    if (amt > wallet.balance) { toast.error('Insufficient wallet balance'); return; }
-    setSending(true);
-    try {
-      await safeJsonFetch('/api/wallet/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ walletId: wallet.id, toAddress, amount: amt, memo }),
-      });
-      toast.success('Transaction submitted · pending confirmation');
-      setToAddress(''); setAmount(''); setMemo('');
-      loadTx();
-    } catch (e: any) {
-      toast.error(e.message || 'Send failed');
-    } finally {
-      setSending(false);
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" /> Back to wallets
-        </button>
-        <Button variant="ghost" size="sm" onClick={onDelete} className="text-destructive hover:text-destructive">
-          <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete
-        </Button>
-      </div>
-
-      {/* Wallet header */}
-      <Card className="arvest-gradient text-white">
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center">
-                <Icon className="w-5 h-5" />
+      {/* Private key reveal */}
+      {revealKey && (
+        <Dialog open={!!revealKey} onOpenChange={(o) => !o && setRevealKey(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-amber-600" /> Save your private key
+              </DialogTitle>
+              <DialogDescription>
+                This is the <strong>only time</strong> we will show your private key. Copy it and store it in a secure location. Arvest cannot recover it for you.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2 space-y-2">
+              <div className="p-3 rounded-md bg-muted/60 border border-border">
+                <div className="text-[10px] text-muted-foreground tracking-wider mb-1">PRIVATE KEY — {revealKey.label}</div>
+                <div className="font-mono text-xs break-all">{revealKey.key}</div>
               </div>
-              <div>
-                <div className="text-sm font-medium">{wallet.label}</div>
-                <div className="text-[11px] text-white/70">{meta.label} · {wallet.type}</div>
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  navigator.clipboard.writeText(revealKey.key);
+                  toast.success('Private key copied');
+                }}
+              >
+                <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy private key
+              </Button>
             </div>
-            <Button variant="outline" size="sm" onClick={onRevealKey} className="bg-white/10 border-white/20 text-white hover:bg-white/20">
-              <KeyRound className="w-3.5 h-3.5 mr-1.5" /> Private key
-            </Button>
-          </div>
-          <div className="font-mono-balance text-3xl mb-1">
-            {wallet.type === 'USD' ? formatCurrency(wallet.balance) : `${wallet.balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${wallet.type}`}
-          </div>
-          <div className="text-[11px] text-white/70 font-mono break-all">{wallet.address}</div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Send form */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Send className="w-4 h-4" /> Send {wallet.type}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>To address</Label>
-              <Input value={toAddress} onChange={(e) => setToAddress(e.target.value)} placeholder={`Recipient ${wallet.type} address`} className="font-mono text-xs" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Amount</Label>
-                <Input type="number" step="0.0001" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="font-mono-balance" />
-              </div>
-              <div className="space-y-2">
-                <Label>Memo (optional)</Label>
-                <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Note" />
-              </div>
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              Available: <span className="font-medium text-foreground font-mono-balance">
-                {wallet.type === 'USD' ? formatCurrency(wallet.balance) : `${wallet.balance} ${wallet.type}`}
-              </span>
-            </div>
-            <Button onClick={send} disabled={sending || !toAddress || !amount} className="w-full arvest-gradient text-white">
-              {sending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending…</> : <><Send className="w-4 h-4 mr-2" /> Send {wallet.type}</>}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Transaction history */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Transaction History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-              </div>
-            ) : transactions.length === 0 ? (
-              <div className="text-center py-10">
-                <Send className="w-7 h-7 text-muted-foreground mx-auto mb-2 opacity-40" />
-                <p className="text-sm text-muted-foreground">No transactions yet</p>
-              </div>
-            ) : (
-              <div className="space-y-1 max-h-[400px] overflow-y-auto arvest-scroll">
-                {transactions.map(t => {
-                  const isSend = t.type === 'SEND';
-                  return (
-                    <div key={t.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/40 border-b border-border last:border-0">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isSend ? 'bg-destructive/10 text-destructive' : 'bg-emerald-100 text-emerald-700'}`}>
-                        {isSend ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownLeft className="w-4 h-4" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-medium truncate">{isSend ? 'Sent' : 'Received'}</span>
-                          <span className={`font-mono-balance text-sm shrink-0 ${isSend ? 'text-destructive' : 'text-emerald-600'}`}>
-                            {isSend ? '-' : '+'}{t.amount} {wallet.type}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 mt-0.5">
-                          <span className="text-[11px] text-muted-foreground truncate font-mono">
-                            {isSend ? t.toAddress : t.fromAddress}
-                          </span>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className="text-[10px] text-muted-foreground">{formatDate(t.createdAt)}</span>
-                            <Badge variant="outline" className="text-[9px] h-3.5 px-1">{t.status}</Badge>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            <DialogFooter>
+              <Button onClick={() => setRevealKey(null)} className="arvest-gradient text-white">
+                I've saved my key
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -22,11 +22,13 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useAuth, formatCurrency, formatDate, formatDateTime, maskAccountNumber } from '@/lib/store';
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Users, TrendingUp, DollarSign, Activity, Search, Plus, MoreHorizontal,
   Pencil, Trash2, KeyRound, Shield, AlertTriangle, CheckCircle2, XCircle,
   Flag, Eye, ArrowUpRight, ArrowDownLeft, LogOut, Building2, Crown,
-  RefreshCw, ChevronRight,
+  RefreshCw, ChevronRight, MessageSquare, Reply, Calendar, X,
 } from 'lucide-react';
 import {
   BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -120,6 +122,9 @@ export function AdminDashboard() {
 
   // Customer detail view (when admin clicks a customer row)
   const [detailViewCustomerId, setDetailViewCustomerId] = useState<string | null>(null);
+
+  // Active admin view: 'overview' (default dashboard) | 'messages' (Message Center)
+  const [adminView, setAdminView] = useState<'overview' | 'messages'>('overview');
 
   async function loadAll() {
     setRefreshing(true);
@@ -279,7 +284,7 @@ export function AdminDashboard() {
             <div className="text-xs text-sidebar-foreground/70">{user?.email}</div>
           </div>
           <nav className="flex-1 p-3 space-y-1 text-sm">
-            <button onClick={() => setDetailViewCustomerId(null)} className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-sidebar-primary/15 text-sidebar-primary">
+            <button onClick={() => { setDetailViewCustomerId(null); setAdminView('overview'); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-sidebar-primary/15 text-sidebar-primary">
               <Activity className="w-4 h-4" /> Back to Overview
             </button>
           </nav>
@@ -341,18 +346,31 @@ export function AdminDashboard() {
         </div>
 
         <nav className="flex-1 p-3 space-y-1 text-sm">
-          <a href="#" className="flex items-center gap-2 px-3 py-2 rounded-md bg-sidebar-primary/15 text-sidebar-primary">
+          <button
+            onClick={() => setAdminView('overview')}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-md ${adminView === 'overview' ? 'bg-sidebar-primary/15 text-sidebar-primary' : 'hover:bg-sidebar-accent text-sidebar-foreground/80'}`}
+          >
             <Activity className="w-4 h-4" /> Overview
-          </a>
-          <a href="#users" className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/80">
-            <Users className="w-4 h-4" /> Customers
-          </a>
-          <a href="#transactions" className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/80">
-            <TrendingUp className="w-4 h-4" /> Transactions
-          </a>
-          <a href="#audit" className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/80">
-            <Shield className="w-4 h-4" /> Audit Log
-          </a>
+          </button>
+          <button
+            onClick={() => setAdminView('messages')}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-md ${adminView === 'messages' ? 'bg-sidebar-primary/15 text-sidebar-primary' : 'hover:bg-sidebar-accent text-sidebar-foreground/80'}`}
+          >
+            <MessageSquare className="w-4 h-4" /> Message Center
+          </button>
+          {adminView === 'overview' && (
+            <>
+              <a href="#users" className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/80 pl-6">
+                <Users className="w-4 h-4" /> Customers
+              </a>
+              <a href="#transactions" className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/80 pl-6">
+                <TrendingUp className="w-4 h-4" /> Transactions
+              </a>
+              <a href="#audit" className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/80 pl-6">
+                <Shield className="w-4 h-4" /> Audit Log
+              </a>
+            </>
+          )}
         </nav>
 
         <div className="p-3 border-t border-sidebar-border">
@@ -368,13 +386,15 @@ export function AdminDashboard() {
           <div className="flex items-center gap-3 px-4 lg:px-8 h-16">
             <div>
               <div className="text-[11px] text-muted-foreground tracking-wider uppercase">Arvest Private · Admin Console</div>
-              <div className="text-sm font-medium">Operations Dashboard</div>
+              <div className="text-sm font-medium">{adminView === 'overview' ? 'Operations Dashboard' : 'Message Center'}</div>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <NotificationBell />
-              <Button variant="outline" size="sm" onClick={loadAll} disabled={refreshing}>
-                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
-              </Button>
+              {adminView === 'overview' && (
+                <Button variant="outline" size="sm" onClick={loadAll} disabled={refreshing}>
+                  <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+                </Button>
+              )}
               {user && (
                 <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-muted/50">
                   <Avatar className="w-7 h-7">
@@ -391,6 +411,10 @@ export function AdminDashboard() {
         </header>
 
         <main className="flex-1 p-4 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+          {adminView === 'messages' ? (
+            <AdminMessageCenter />
+          ) : (
+          <>
           {/* KPI tiles */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KpiTile
@@ -545,7 +569,7 @@ export function AdminDashboard() {
                         <TableCell className="hidden md:table-cell text-xs">{c.phone || '—'}</TableCell>
                         <TableCell className="hidden lg:table-cell text-xs">{formatDate(c.createdAt)}</TableCell>
                         <TableCell className="text-right text-sm">{c.accountCount}</TableCell>
-                        <TableCell className="text-right font-serif-display text-base">{formatCurrency(c.totalBalance)}</TableCell>
+                        <TableCell className="text-right font-mono-balance text-base font-semibold">{formatCurrency(c.totalBalance)}</TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
                             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDetailViewCustomerId(c.id)}>
@@ -589,7 +613,7 @@ export function AdminDashboard() {
                       <div className="text-[11px] text-muted-foreground truncate">{c.email}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-serif-display text-base">{formatCurrency(c.totalBalance)}</div>
+                      <div className="font-mono-balance text-base font-semibold">{formatCurrency(c.totalBalance)}</div>
                     </div>
                   </div>
                 ))}
@@ -725,6 +749,8 @@ export function AdminDashboard() {
               </div>
             </CardContent>
           </Card>
+          </>
+          )}
         </main>
 
         <footer className="mt-auto border-t border-border py-4 px-4 lg:px-8 text-center text-xs text-muted-foreground">
@@ -952,7 +978,7 @@ function KpiTile({ icon: Icon, label, value, sub, accent }: { icon: any; label: 
         <div className="flex items-start justify-between">
           <div>
             <div className="text-[11px] text-muted-foreground tracking-wider uppercase mb-1">{label}</div>
-            <div className="font-serif-display text-2xl">{value}</div>
+            <div className="font-mono-balance text-2xl font-semibold">{value}</div>
             {sub && <div className="text-[11px] text-muted-foreground mt-1">{sub}</div>}
           </div>
           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent === 'amber' ? 'bg-amber-100 text-amber-700' : 'bg-primary/10 text-primary'}`}>
@@ -961,5 +987,328 @@ function KpiTile({ icon: Icon, label, value, sub, accent }: { icon: any; label: 
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+interface AdminMessage {
+  id: string; subject: string; body: string; fromBank: boolean; read: boolean;
+  createdAt: string; userId: string;
+  user?: { id: string; name: string; email: string; loginId?: string };
+}
+
+interface AdminAppointment {
+  id: string; type: string; topic: string; date: string; status: string;
+  notes: string | null; userId: string;
+  user?: { id: string; name: string; email: string; phone?: string };
+}
+
+// === Admin Message Center ===
+function AdminMessageCenter() {
+  const [tab, setTab] = useState<'pending' | 'messages' | 'appointments'>('pending');
+  const [messages, setMessages] = useState<AdminMessage[]>([]);
+  const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
+  const [pendingTx, setPendingTx] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [replyTo, setReplyTo] = useState<AdminMessage | null>(null);
+  const [replySubject, setReplySubject] = useState('');
+  const [replyBody, setReplyBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [acting, setActing] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [mRes, aRes, tRes] = await Promise.all([
+        fetch('/api/admin/messages'),
+        fetch('/api/admin/appointments'),
+        fetch('/api/transactions?limit=300'),
+      ]);
+      const mData = await mRes.json();
+      const aData = await aRes.json();
+      const tData = await tRes.json();
+      setMessages(mData.messages || []);
+      setAppointments(aData.appointments || []);
+      const pending = (tData.transactions || []).filter((t: Transaction) => t.status === 'PENDING');
+      setPendingTx(pending);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function approveTx(txId: string, approve: boolean) {
+    setActing(txId);
+    try {
+      const res = await fetch('/api/admin/transaction-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId: txId, action: approve ? 'APPROVE' : 'DECLINE', reason: approve ? 'Approved via Message Center' : 'Declined via Message Center' }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Failed'); return; }
+      toast.success(approve ? 'Transaction approved' : 'Transaction declined');
+      load();
+    } finally {
+      setActing(null);
+    }
+  }
+
+  function openReply(m: AdminMessage) {
+    setReplyTo(m);
+    setReplySubject(`Re: ${m.subject}`);
+    setReplyBody('');
+  }
+
+  async function sendReply() {
+    if (!replyTo || !replyBody.trim()) return;
+    setSending(true);
+    try {
+      const res = await fetch('/api/admin/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: replyTo.userId,
+          subject: replySubject || `Re: ${replyTo.subject}`,
+          body: replyBody,
+          replyToId: replyTo.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Failed to send'); return; }
+      toast.success('Reply sent');
+      setReplyTo(null); setReplySubject(''); setReplyBody('');
+      load();
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function updateAppointment(id: string, status: 'CONFIRMED' | 'CANCELLED') {
+    setActing(id);
+    try {
+      const res = await fetch('/api/admin/appointments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Failed'); return; }
+      toast.success(`Appointment ${status.toLowerCase()}`);
+      load();
+    } finally {
+      setActing(null);
+    }
+  }
+
+  const clientMessages = messages.filter(m => !m.fromBank);
+
+  return (
+    <>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+        <TabsList>
+          <TabsTrigger value="pending">
+            <Flag className="w-3.5 h-3.5 mr-1.5" /> Pending Approvals
+            <Badge variant="secondary" className="ml-1.5 text-[10px] h-4 px-1">{pendingTx.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="messages">
+            <MessageSquare className="w-3.5 h-3.5 mr-1.5" /> Client Messages
+            <Badge variant="secondary" className="ml-1.5 text-[10px] h-4 px-1">{clientMessages.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="appointments">
+            <Calendar className="w-3.5 h-3.5 mr-1.5" /> Appointments
+            <Badge variant="secondary" className="ml-1.5 text-[10px] h-4 px-1">{appointments.length}</Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Pending Approvals */}
+        <TabsContent value="pending" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Flag className="w-4 h-4" /> Pending Transaction Approvals
+              </CardTitle>
+              <CardDescription className="text-xs">Approve or deny customer-submitted transactions (transfers, payments, deposits, Zelle).</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">Loading…</div>
+              ) : pendingTx.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-600" />
+                  No pending approvals. You're all caught up.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[500px] overflow-y-auto arvest-scroll">
+                  {pendingTx.map((t) => {
+                    const custName = t.fromAccount?.user?.name || t.toAccount?.user?.name || '—';
+                    return (
+                      <div key={t.id} className="flex items-center gap-3 p-3 rounded-md border border-border">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center ${t.toAccount ? 'bg-emerald-100 text-emerald-700' : 'bg-primary/10 text-primary'}`}>
+                          {t.toAccount ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{t.description}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {custName} · {formatDateTime(t.date)}
+                          </div>
+                        </div>
+                        <div className="text-sm font-medium mr-2">{formatCurrency(t.amount)}</div>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={acting === t.id} onClick={() => approveTx(t.id, true)}>
+                            <CheckCircle2 className="w-3 h-3 mr-1" /> Approve
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:bg-destructive/10" disabled={acting === t.id} onClick={() => approveTx(t.id, false)}>
+                            <XCircle className="w-3 h-3 mr-1" /> Deny
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Client Messages */}
+        <TabsContent value="messages" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MessageSquare className="w-4 h-4" /> Client Messages
+              </CardTitle>
+              <CardDescription className="text-xs">Messages sent by clients to the bank. Click "Reply Direct" to send a response.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">Loading…</div>
+              ) : clientMessages.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  No client messages yet.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[500px] overflow-y-auto arvest-scroll">
+                  {clientMessages.map((m) => (
+                    <div key={m.id} className="p-3 rounded-md border border-border">
+                      <div className="flex items-start gap-3">
+                        <Avatar className="w-9 h-9">
+                          <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                            {m.user?.name?.charAt(0) || '?'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-sm font-medium">{m.user?.name || 'Unknown'}</span>
+                            {!m.read && <Badge variant="secondary" className="text-[9px] h-4 px-1">NEW</Badge>}
+                            <span className="text-[11px] text-muted-foreground ml-auto">{formatDateTime(m.createdAt)}</span>
+                          </div>
+                          <div className="text-sm font-medium">{m.subject}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{m.body}</div>
+                          <Button size="sm" variant="outline" className="h-7 text-xs mt-2" onClick={() => openReply(m)}>
+                            <Reply className="w-3 h-3 mr-1" /> Reply Direct
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Appointments */}
+        <TabsContent value="appointments" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Appointment Requests
+              </CardTitle>
+              <CardDescription className="text-xs">Confirm or cancel client-requested appointments.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">Loading…</div>
+              ) : appointments.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  <Calendar className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  No appointments booked.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[500px] overflow-y-auto arvest-scroll">
+                  {appointments.map((a) => (
+                    <div key={a.id} className="p-3 rounded-md border border-border">
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center">
+                          <Calendar className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-sm font-medium">{a.user?.name || 'Unknown'}</span>
+                            <Badge
+                              variant={a.status === 'CONFIRMED' ? 'default' : a.status === 'CANCELLED' ? 'destructive' : a.status === 'COMPLETED' ? 'outline' : 'secondary'}
+                              className="text-[9px]"
+                            >
+                              {a.status}
+                            </Badge>
+                          </div>
+                          <div className="text-xs">
+                            <span className="font-medium">{a.topic}</span> · {a.type} · {formatDateTime(a.date)}
+                          </div>
+                          {a.notes && <div className="text-[11px] text-muted-foreground mt-0.5 italic">"{a.notes}"</div>}
+                          {a.status === 'SCHEDULED' && (
+                            <div className="flex gap-1 mt-2">
+                              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={acting === a.id} onClick={() => updateAppointment(a.id, 'CONFIRMED')}>
+                                <CheckCircle2 className="w-3 h-3 mr-1" /> Confirm
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:bg-destructive/10" disabled={acting === a.id} onClick={() => updateAppointment(a.id, 'CANCELLED')}>
+                                <X className="w-3 h-3 mr-1" /> Cancel
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Reply dialog */}
+      <Dialog open={!!replyTo} onOpenChange={(o) => !o && setReplyTo(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Reply className="w-5 h-5" /> Reply to {replyTo?.user?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Original message: "{replyTo?.subject}" — your reply will appear in the client's Messages inbox.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-2">
+              <Label>Subject</Label>
+              <Input value={replySubject} onChange={(e) => setReplySubject(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Reply</Label>
+              <Textarea rows={5} value={replyBody} onChange={(e) => setReplyBody(e.target.value)} placeholder="Write your reply…" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReplyTo(null)}>Cancel</Button>
+            <Button onClick={sendReply} disabled={sending || !replyBody.trim()} className="arvest-gradient text-white">
+              {sending ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Reply className="w-4 h-4 mr-2" />}
+              Send reply
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
