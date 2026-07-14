@@ -27,7 +27,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Users, TrendingUp, DollarSign, Activity, Search, Plus, MoreHorizontal,
   Pencil, Trash2, KeyRound, Shield, AlertTriangle, CheckCircle2, XCircle,
-  Flag, Eye, ArrowUpRight, ArrowDownLeft, LogOut, Building2, Crown,
+  Flag, Eye, ArrowUpRight, ArrowDownLeft, LogOut, Building2, Crown, Menu,
   RefreshCw, ChevronRight, MessageSquare, Reply, Calendar, X,
 } from 'lucide-react';
 import {
@@ -125,6 +125,7 @@ export function AdminDashboard() {
 
   // Active admin view: 'overview' (default dashboard) | 'messages' (Message Center)
   const [adminView, setAdminView] = useState<'overview' | 'messages'>('overview');
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   async function loadAll() {
     setRefreshing(true);
@@ -320,7 +321,65 @@ export function AdminDashboard() {
   return (
     <div className="min-h-screen flex">
       <InactivityGuard onLogout={async () => { await logout(); window.location.href = '/'; }} />
-      {/* Sidebar */}
+
+      {/* ===== Mobile sidebar drawer ===== */}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" className="p-0 w-72 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+          <SheetTitle className="sr-only">Admin Navigation</SheetTitle>
+          <div className="p-5 border-b border-sidebar-border">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-md bg-sidebar-primary/15 border border-sidebar-primary/30 flex items-center justify-center">
+                <span className="font-serif-display text-lg text-sidebar-primary">A</span>
+              </div>
+              <div>
+                <div className="font-serif-display text-base tracking-wide">ARVEST</div>
+                <div className="text-[8px] tracking-[0.3em] text-sidebar-foreground/60 -mt-0.5">PRIVATE · ADMIN</div>
+              </div>
+            </div>
+          </div>
+          <div className="p-4 border-b border-sidebar-border">
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-sidebar-primary/10 text-[10px] text-sidebar-primary tracking-wider mb-3">
+              <Crown className="w-3 h-3" />
+              ADMINISTRATOR
+            </div>
+            <div className="text-xs text-sidebar-foreground/70">{user?.email}</div>
+          </div>
+          <nav className="flex-1 p-3 space-y-1 text-sm">
+            <button
+              onClick={() => { setAdminView('overview'); setMobileOpen(false); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-md ${adminView === 'overview' ? 'bg-sidebar-primary/15 text-sidebar-primary' : 'hover:bg-sidebar-accent text-sidebar-foreground/80'}`}
+            >
+              <Activity className="w-4 h-4" /> Overview
+            </button>
+            <button
+              onClick={() => { setAdminView('messages'); setMobileOpen(false); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-md ${adminView === 'messages' ? 'bg-sidebar-primary/15 text-sidebar-primary' : 'hover:bg-sidebar-accent text-sidebar-foreground/80'}`}
+            >
+              <MessageSquare className="w-4 h-4" /> Message Center
+            </button>
+            {adminView === 'overview' && (
+              <>
+                <a href="#users" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/80 pl-6">
+                  <Users className="w-4 h-4" /> Customers
+                </a>
+                <a href="#transactions" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/80 pl-6">
+                  <TrendingUp className="w-4 h-4" /> Transactions
+                </a>
+                <a href="#audit" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/80 pl-6">
+                  <Shield className="w-4 h-4" /> Audit Log
+                </a>
+              </>
+            )}
+          </nav>
+          <div className="p-3 border-t border-sidebar-border">
+            <button onClick={() => { logout().then(() => { window.location.href = '/'; }); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent">
+              <LogOut className="w-4 h-4" /> Sign out
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ===== Desktop sidebar ===== */}
       <aside className="hidden lg:flex flex-col w-60 bg-sidebar text-sidebar-foreground shrink-0">
         <div className="p-5 border-b border-sidebar-border">
           <div className="flex items-center gap-2.5">
@@ -375,14 +434,21 @@ export function AdminDashboard() {
             <LogOut className="w-4 h-4" /> Sign out
           </button>
         </div>
-      </aside>
+    </aside>
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
           <div className="flex items-center gap-3 px-4 lg:px-8 h-16">
-            <div>
-              <div className="text-[11px] text-muted-foreground tracking-wider uppercase">Arvest Private · Admin Console</div>
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="lg:hidden p-2 -ml-2 rounded-md hover:bg-muted text-sidebar-foreground"
+              title="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <div className="text-[11px] text-muted-foreground tracking-wider uppercase truncate">Arvest Private · Admin</div>
               <div className="text-sm font-medium">{adminView === 'overview' ? 'Operations Dashboard' : 'Message Center'}</div>
             </div>
             <div className="ml-auto flex items-center gap-2">
@@ -394,12 +460,23 @@ export function AdminDashboard() {
               )}
               {user && (
                 <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-muted/50">
-                  <Avatar className="w-7 h-7">
+                                          <Avatar className="w-7 h-7">
                     <AvatarFallback className="text-xs bg-primary/10 text-primary">{user.name.charAt(0)}</AvatarFallback>
                   </Avatar>
                   <span className="text-sm hidden sm:block">{user.name}</span>
                 </div>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { logout().then(() => { window.location.href = '/'; }); }}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                title="Sign out"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="sm:hidden ml-1 text-xs font-medium">Sign out</span>
+                <span className="hidden sm:inline ml-1.5">Sign out</span>
+              </Button>
             </div>
           </div>
         </header>
