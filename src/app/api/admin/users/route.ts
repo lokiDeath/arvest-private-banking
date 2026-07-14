@@ -133,10 +133,32 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'UPDATE') {
-      const { id, name, phone, address, avatarUrl } = body as any;
+      const { id, name, email, loginId, phone, address, avatarUrl } = body as any;
       if (!id) return NextResponse.json({ error: 'User id required' }, { status: 400 });
-      await db.user.update({ where: { id }, data: { name, phone, address, avatarUrl } });
-      await db.auditLog.create({ data: { userId: id, actor: admin.email, action: 'USER_UPDATE', detail: 'Admin updated customer profile' } });
+
+      // Build update data — only include fields that are provided
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (phone !== undefined) updateData.phone = phone;
+      if (address !== undefined) updateData.address = address;
+      if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
+
+      // Email uniqueness check (if changing)
+      if (email !== undefined && email !== '') {
+        const existing = await db.user.findFirst({ where: { email: email.toLowerCase(), NOT: { id } } });
+        if (existing) return NextResponse.json({ error: 'Email already in use by another customer.' }, { status: 400 });
+        updateData.email = email.toLowerCase();
+      }
+
+      // Login ID uniqueness check (if changing)
+      if (loginId !== undefined && loginId !== '') {
+        const existingLogin = await db.user.findFirst({ where: { loginId: loginId.toLowerCase(), NOT: { id } } });
+        if (existingLogin) return NextResponse.json({ error: 'Login ID already in use by another customer.' }, { status: 400 });
+        updateData.loginId = loginId.toLowerCase();
+      }
+
+      await db.user.update({ where: { id }, data: updateData });
+      await db.auditLog.create({ data: { userId: id, actor: admin.email, action: 'USER_UPDATE', detail: `Admin updated customer profile (fields: ${Object.keys(updateData).join(', ')})` } });
       return NextResponse.json({ ok: true });
     }
 
