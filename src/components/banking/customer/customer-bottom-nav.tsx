@@ -19,17 +19,10 @@ export function CustomerBottomNav({ current, onNavigate }: Props) {
 
   return (
     <nav
-      className="lg:hidden fixed left-0 right-0 z-40 bg-background/95 backdrop-blur border-t border-border shadow-lg"
-      style={{
-        bottom: '16px',
-        paddingBottom: 'calc(env(safe-area-inset-bottom) + 6px)',
-        paddingTop: '8px',
-        borderRadius: '14px',
-        marginLeft: '6px',
-        marginRight: '6px',
-      }}
+      className="lg:hidden fixed left-0 right-0 bottom-0 z-40 bg-background/95 backdrop-blur border-t border-border"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)', paddingTop: '8px' }}
     >
-      <div className="grid grid-cols-5 h-14">
+      <div className="grid grid-cols-5 h-16">
         {items.map((item) => {
           const Icon = item.icon;
           const active = current === item.key;
